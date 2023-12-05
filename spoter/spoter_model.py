@@ -19,11 +19,12 @@ class SPOTERTransformerDecoderLayer(nn.TransformerDecoderLayer):
     def __init__(self, d_model, nhead, dim_feedforward, dropout, activation):
         super(SPOTERTransformerDecoderLayer, self).__init__(d_model, nhead, dim_feedforward, dropout, activation)
 
-        del self.self_attn
+        # del self.self_attn
 
     def forward(self, tgt: torch.Tensor, memory: torch.Tensor, tgt_mask: Optional[torch.Tensor] = None,
                 memory_mask: Optional[torch.Tensor] = None, tgt_key_padding_mask: Optional[torch.Tensor] = None,
-                memory_key_padding_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+                memory_key_padding_mask: Optional[torch.Tensor] = None, tgt_is_causal: Optional[bool] = False,
+                memory_is_causal: Optional[bool] = False) -> torch.Tensor:
 
         tgt = tgt + self.dropout1(tgt)
         tgt = self.norm1(tgt)
@@ -44,7 +45,7 @@ class SPOTER(nn.Module):
     of skeletal data.
     """
 
-    def __init__(self, num_classes, hidden_dim=55):
+    def __init__(self, num_classes, hidden_dim=108):
         super().__init__()
 
         self.row_embed = nn.Parameter(torch.rand(50, hidden_dim))

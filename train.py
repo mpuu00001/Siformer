@@ -17,7 +17,7 @@ from pathlib import Path
 from utils import __balance_val_split, __split_of_train_sequence, __log_class_statistics
 from datasets.czech_slr_dataset import CzechSLRDataset
 from spoter.spoter_model import SPOTER
-from spoter.utils import train_epoch, evaluate
+from spoter.utils import train_epoch, evaluate, evaluate_top_k
 from spoter.gaussian_noise import GaussianNoise
 
 
@@ -199,6 +199,9 @@ def train(args):
                 print("[" + str(epoch + 1) + "] VALIDATION  acc: " + str(val_acc))
                 logging.info("[" + str(epoch + 1) + "] VALIDATION  acc: " + str(val_acc))
 
+                print("[" + str(epoch + 1) + "] VALIDATION  Top k acc: " + str(top_val_acc))
+                logging.info("[" + str(epoch + 1) + "] VALIDATION  Top k acc: " + str(top_val_acc))
+
             print("")
             logging.info("")
 
@@ -223,6 +226,7 @@ def train(args):
                 tested_model = torch.load("out-checkpoints/" + args.experiment_name + "/checkpoint_" + checkpoint_id + "_" + str(i) + ".pth")
                 tested_model.train(False)
                 _, _, eval_acc = evaluate(tested_model, eval_loader, device, print_stats=True)
+                _, _, top_val_acc = evaluate_top_k(slrt_model, val_loader, device)
 
                 if eval_acc > top_result:
                     top_result = eval_acc

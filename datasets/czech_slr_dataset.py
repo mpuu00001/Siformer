@@ -101,7 +101,7 @@ class CzechSLRDataset(torch_data.Dataset):
         """
 
         depth_map = torch.from_numpy(np.copy(self.data[idx]))
-        label = torch.Tensor([self.labels[idx] - 1])
+        label = torch.Tensor([self.labels[idx]])
 
         depth_map = tensor_to_dictionary(depth_map)
 
