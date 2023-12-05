@@ -27,7 +27,7 @@ def get_default_args():
     parser.add_argument("--experiment_name", type=str, default="lsa_64_spoter",
                         help="Name of the experiment after which the logs and plots will be named")
     parser.add_argument("--num_classes", type=int, default=64, help="Number of classes to be recognized by the model")
-    parser.add_argument("--hidden_dim", type=int, default=108,
+    parser.add_argument("--num_seq_elements", type=int, default=108,
                         help="Hidden dimension of the underlying Transformer model")
     parser.add_argument("--seed", type=int, default=379,
                         help="Seed with which to initialize all the random components of the training")
@@ -105,7 +105,7 @@ def train(args):
         device = torch.device("cuda")
 
     # Construct the model
-    slrt_model = SPOTER(num_classes=args.num_classes, hidden_dim=args.hidden_dim)
+    slrt_model = SPOTER(num_classes=args.num_classes, num_seq_elements=args.num_seq_elements)
     slrt_model.train(True)
     slrt_model.to(device)
 

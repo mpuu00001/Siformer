@@ -45,14 +45,14 @@ class SPOTER(nn.Module):
     of skeletal data.
     """
 
-    def __init__(self, num_classes, hidden_dim=108):
+    def __init__(self, num_classes, num_seq_elements=108):
         super().__init__()
 
-        self.row_embed = nn.Parameter(torch.rand(50, hidden_dim))
+        self.row_embed = nn.Parameter(torch.rand(50, num_seq_elements))
         self.pos = nn.Parameter(torch.cat([self.row_embed[0].unsqueeze(0).repeat(1, 1, 1)], dim=-1).flatten(0, 1).unsqueeze(0))
-        self.class_query = nn.Parameter(torch.rand(1, hidden_dim))
-        self.transformer = nn.Transformer(hidden_dim, 9, 6, 6)
-        self.linear_class = nn.Linear(hidden_dim, num_classes)
+        self.class_query = nn.Parameter(torch.rand(1, num_seq_elements))
+        self.transformer = nn.Transformer(num_seq_elements, 9, 6, 6)
+        self.linear_class = nn.Linear(num_seq_elements, num_classes)
 
         # Deactivate the initial attention decoder mechanism
         custom_decoder_layer = SPOTERTransformerDecoderLayer(self.transformer.d_model, self.transformer.nhead, 2048,
