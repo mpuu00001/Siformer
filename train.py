@@ -199,8 +199,8 @@ def train(args):
                 print("[" + str(epoch + 1) + "] VALIDATION  acc: " + str(val_acc))
                 logging.info("[" + str(epoch + 1) + "] VALIDATION  acc: " + str(val_acc))
 
-                print("[" + str(epoch + 1) + "] VALIDATION  Top k acc: " + str(top_val_acc))
-                logging.info("[" + str(epoch + 1) + "] VALIDATION  Top k acc: " + str(top_val_acc))
+                print("[" + str(epoch + 1) + "] VALIDATION  Top 5 acc: " + str(top_val_acc))
+                logging.info("[" + str(epoch + 1) + "] VALIDATION  Top 5 acc: " + str(top_val_acc))
 
             print("")
             logging.info("")
