@@ -49,7 +49,7 @@ class SPOTER(nn.Module):
         super().__init__()
 
         self.row_embed = nn.Parameter(torch.rand(50, num_seq_elements))
-        self.pos = nn.Parameter(torch.cat([self.row_embed[0].unsqueeze(0).repeat(1, 1, 1)], dim=-1).flatten(0, 1).unsqueeze(0))
+        self.element_pos = nn.Parameter(torch.cat([self.row_embed[0].unsqueeze(0).repeat(1, 1, 1)], dim=-1).flatten(0, 1).unsqueeze(0))
         self.class_query = nn.Parameter(torch.rand(1, num_seq_elements))
         self.transformer = nn.Transformer(num_seq_elements, 9, 6, 6)
         self.linear_class = nn.Linear(num_seq_elements, num_classes)
@@ -60,11 +60,10 @@ class SPOTER(nn.Module):
         self.transformer.decoder.layers = _get_clones(custom_decoder_layer, self.transformer.decoder.num_layers)
 
     def forward(self, inputs):
-        h = torch.unsqueeze(inputs.flatten(start_dim=1), 1).float()
-        h = self.transformer(self.pos + h, self.class_query.unsqueeze(0)).transpose(0, 1)
-        res = self.linear_class(h)
-
-        return res
+        new_inputs = torch.unsqueeze(inputs.flatten(start_dim=1), 1).float()
+        new_inputs = self.transformer(self.element_pos + new_inputs, self.class_query.unsqueeze(0)).transpose(0, 1)
+        out = self.linear_class(new_inputs)
+        return out
 
 
 if __name__ == "__main__":
