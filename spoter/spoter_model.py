@@ -68,7 +68,7 @@ class SPOTER(nn.Module):
 
     def __init__(self, num_classes, num_seq_elements=108):
         super().__init__()
-        self.frame_pos = nn.Parameter(frame_wise_embedding_matrix())
+        self.frame_wise_pos = nn.Parameter(frame_wise_embedding_matrix())
         self.class_query = nn.Parameter(torch.rand(1, num_seq_elements))
         self.transformer = nn.Transformer(num_seq_elements, 9, 6, 6)
         self.linear_class = nn.Linear(num_seq_elements, num_classes)
