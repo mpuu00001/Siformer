@@ -5,6 +5,8 @@ import torch
 import torch.nn as nn
 from typing import Optional
 
+import torch.nn.functional as F
+
 
 def _get_clones(mod, n):
     return nn.ModuleList([copy.deepcopy(mod) for _ in range(n)])
@@ -39,27 +41,6 @@ class SPOTERTransformerDecoderLayer(nn.TransformerDecoderLayer):
         return tgt
 
 
-def frame_wise_embedding_matrix(num_frame=204, num_seq_elements=108):
-
-    # Set a seed for reproducibility
-    torch.manual_seed(42)
-
-    # Define the shape of the tensor
-    tensor_shape = (num_frame, num_seq_elements)
-
-    # Initialize the tensor with random values between [0, 1]
-    frame_pos = torch.rand(tensor_shape)
-
-    # Ensure that values within the same inner matrix are the same
-    for i in range(tensor_shape[0]):
-        for j in range(1, tensor_shape[1]):
-            frame_pos[i, j] = frame_pos[i, j - 1]
-
-    res = frame_pos.unsqueeze(1)
-
-    return res
-
-
 class SPOTER(nn.Module):
     """
     Implementation of the SPOTER (Sign POse-based TransformER) architecture for sign language recognition from sequence
@@ -80,9 +61,30 @@ class SPOTER(nn.Module):
 
     def forward(self, inputs):
         new_inputs = torch.unsqueeze(inputs.flatten(start_dim=1), 1).float()
-        new_inputs = self.transformer(self.frame_pos + new_inputs, self.class_query.unsqueeze(0)).transpose(0, 1)
+        new_inputs = self.transformer(self.frame_wise_pos + new_inputs, self.class_query.unsqueeze(0)).transpose(0, 1)
         out = self.linear_class(new_inputs)
         return out
+
+
+def frame_wise_embedding_matrix(num_frame=204, num_seq_elements=108):
+
+    # Set a seed for reproducibility
+    torch.manual_seed(42)
+
+    # Define the shape of the tensor
+    tensor_shape = (num_frame, num_seq_elements)
+
+    # Initialize the tensor with random values between [0, 1]
+    frame_pos = torch.rand(tensor_shape)
+
+    # Ensure that values within the same inner matrix are the same
+    for i in range(tensor_shape[0]):
+        for j in range(1, tensor_shape[1]):
+            frame_pos[i, j] = frame_pos[i, j - 1]
+
+    res = frame_pos.unsqueeze(1)
+
+    return res
 
 
 if __name__ == "__main__":
