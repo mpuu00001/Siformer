@@ -41,6 +41,30 @@ class SPOTERTransformerDecoderLayer(nn.TransformerDecoderLayer):
         return tgt
 
 
+class LandmarkEmbedding(nn.Module):
+    def __init__(self, num_hid=108, max_len=204, kernel_size=11):
+        super(LandmarkEmbedding, self).__init__()
+        self.frame_wise_pos = nn.Parameter(frame_wise_embedding_matrix(max_len, num_hid))
+        self.num_hid = num_hid
+        self.conv1 = nn.Conv2d(num_hid//2, num_hid, kernel_size=kernel_size, padding=(kernel_size - 1) // 2)
+        self.conv2 = nn.Conv2d(num_hid, num_hid, kernel_size=kernel_size, padding=(kernel_size - 1) // 2)
+        self.conv3 = nn.Conv2d(num_hid, num_hid, kernel_size=kernel_size, padding=(kernel_size - 1) // 2)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = F.relu(x)
+        x = self.conv2(x)
+        x = F.relu(x)
+        x = self.conv3(x)
+        x = F.relu(x)
+
+        x = x * torch.sqrt(torch.tensor(self.num_hid, dtype=torch.float32))
+        print(x.shape)
+        x = x + self.frame_wise_pos
+
+        return x
+
+
 class SPOTER(nn.Module):
     """
     Implementation of the SPOTER (Sign POse-based TransformER) architecture for sign language recognition from sequence
@@ -49,7 +73,8 @@ class SPOTER(nn.Module):
 
     def __init__(self, num_classes, num_seq_elements=108):
         super().__init__()
-        self.frame_wise_pos = nn.Parameter(frame_wise_embedding_matrix())
+        self.landmark_embedding = LandmarkEmbedding(num_hid=108, max_len=204, kernel_size=11)
+        # self.frame_wise_pos = nn.Parameter(frame_wise_embedding_matrix())
         self.class_query = nn.Parameter(torch.rand(1, num_seq_elements))
         self.transformer = nn.Transformer(num_seq_elements, 9, 6, 6)
         self.linear_class = nn.Linear(num_seq_elements, num_classes)
@@ -60,24 +85,19 @@ class SPOTER(nn.Module):
         self.transformer.decoder.layers = _get_clones(custom_decoder_layer, self.transformer.decoder.num_layers)
 
     def forward(self, inputs):
-        new_inputs = torch.unsqueeze(inputs.flatten(start_dim=1), 1).float()
-        new_inputs = self.transformer(self.frame_wise_pos + new_inputs, self.class_query.unsqueeze(0)).transpose(0, 1)
-        out = self.linear_class(new_inputs)
+        # new_inputs = torch.unsqueeze(inputs.flatten(start_dim=1), 1).float()
+        print(inputs.shape)
+        landmark_embedding_output = self.landmark_embedding(inputs.float())
+        print(landmark_embedding_output.shape)
+        transformer_output = self.transformer(landmark_embedding_output, self.class_query.unsqueeze(0)).transpose(0, 1)
+        out = self.linear_class(transformer_output)
         return out
 
 
 def frame_wise_embedding_matrix(num_frame=204, num_seq_elements=108):
-
-    # Set a seed for reproducibility
     torch.manual_seed(42)
-
-    # Define the shape of the tensor
     tensor_shape = (num_frame, num_seq_elements)
-
-    # Initialize the tensor with random values between [0, 1]
     frame_pos = torch.rand(tensor_shape)
-
-    # Ensure that values within the same inner matrix are the same
     for i in range(tensor_shape[0]):
         for j in range(1, tensor_shape[1]):
             frame_pos[i, j] = frame_pos[i, j - 1]
