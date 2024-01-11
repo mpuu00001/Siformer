@@ -1,56 +1,63 @@
+# utils
+
 
 import logging
 import torch
+import torch.nn.functional as F
 
 
 def train_epoch(model, dataloader, criterion, optimizer, device, scheduler=None):
-
     pred_correct, pred_all = 0, 0
     running_loss = 0.0
 
     for i, data in enumerate(dataloader):
         inputs, labels = data
-        inputs = inputs.squeeze(0).to(device)
+        inputs = inputs.to(device)
         labels = labels.to(device, dtype=torch.long)
 
         optimizer.zero_grad()
-        outputs = model(inputs).expand(1, -1, -1)
+        outputs = model(inputs)
 
-        loss = criterion(outputs[0], labels[0])
+        loss = criterion(outputs, labels.squeeze(1))
         loss.backward()
         optimizer.step()
         running_loss += loss
 
         # Statistics
-        if int(torch.argmax(torch.nn.functional.softmax(outputs, dim=2))) == int(labels[0][0]):
-            pred_correct += 1
-        pred_all += 1
+        _, preds = torch.max(F.softmax(outputs, dim=1), 1)
+        # print(f'preds: {preds}')
+        # print(f'label: {labels.view(-1)}')
+        pred_correct += torch.sum(preds == labels.view(-1)).item()
+        pred_all += labels.size(0)
 
     if scheduler:
-        scheduler.step(running_loss.item() / len(dataloader))
+        scheduler.step()
 
     return running_loss, pred_correct, pred_all, (pred_correct / pred_all)
 
 
 def evaluate(model, dataloader, device, print_stats=False):
-
     pred_correct, pred_all = 0, 0
     stats = {i: [0, 0] for i in range(100)}
 
-    for i, data in enumerate(dataloader):
-        inputs, labels = data
-        inputs = inputs.squeeze(0).to(device)
-        labels = labels.to(device, dtype=torch.long)
+    with torch.no_grad():
+        for i, data in enumerate(dataloader):
+            inputs, labels = data
+            inputs = inputs.to(device)
+            labels = labels.to(device, dtype=torch.long)
 
-        outputs = model(inputs).expand(1, -1, -1)
+            outputs = model(inputs)
 
-        # Statistics
-        if int(torch.argmax(torch.nn.functional.softmax(outputs, dim=2))) == int(labels[0][0]):
-            stats[int(labels[0][0])][0] += 1
-            pred_correct += 1
+            # Statistics
+            _, preds = torch.max(outputs, 1)
+            pred_correct += torch.sum(preds == labels.view(-1)).item()
 
-        stats[int(labels[0][0])][1] += 1
-        pred_all += 1
+            for j in range(labels.size(0)):
+                stats[int(labels[j][0])][1] += 1
+                if preds[j] == labels[j][0]:
+                    stats[int(labels[j][0])][0] += 1
+
+            pred_all += labels.size(0)
 
     if print_stats:
         stats = {key: value[0] / value[1] for key, value in stats.items() if value[1] != 0}
@@ -63,19 +70,19 @@ def evaluate(model, dataloader, device, print_stats=False):
 
 
 def evaluate_top_k(model, dataloader, device, k=5):
-
     pred_correct, pred_all = 0, 0
 
-    for i, data in enumerate(dataloader):
-        inputs, labels = data
-        inputs = inputs.squeeze(0).to(device)
-        labels = labels.to(device, dtype=torch.long)
+    with torch.no_grad():
+        for i, data in enumerate(dataloader):
+            inputs, labels = data
+            inputs = inputs.to(device)
+            labels = labels.to(device, dtype=torch.long)
 
-        outputs = model(inputs).expand(1, -1, -1)
+            outputs = model(inputs)
 
-        if int(labels[0][0]) in torch.topk(outputs, k).indices.tolist():
-            pred_correct += 1
-
-        pred_all += 1
+            # Top-k accuracy
+            _, top_k_preds = torch.topk(outputs, k)
+            pred_correct += torch.sum(top_k_preds == labels.view(-1, 1)).item()
+            pred_all += labels.size(0)
 
     return pred_correct, pred_all, (pred_correct / pred_all)
