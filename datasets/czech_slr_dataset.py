@@ -108,7 +108,7 @@ class CzechSLRDataset(torch_data.Dataset):
         # Apply potential augmentations
         if self.augmentations and random.random() < self.augmentations_prob:
 
-            selected_aug = randrange(4)
+            selected_aug = randrange(5)
 
             if selected_aug == 0:
                 depth_map = augment_rotate(depth_map, (-13, 13))
@@ -121,6 +121,9 @@ class CzechSLRDataset(torch_data.Dataset):
 
             if selected_aug == 3:
                 depth_map = augment_arm_joint_rotate(depth_map, 0.3, (-4, 4))
+
+            if selected_aug == 4:
+                depth_map = depth_map
 
         if self.normalize:
             depth_map = normalize_single_body_dict(depth_map)
