@@ -1,3 +1,4 @@
+# spotter work
 
 import copy
 import torch
@@ -20,7 +21,6 @@ class SPOTERTransformerDecoderLayer(nn.TransformerDecoderLayer):
 
     def __init__(self, d_model, nhead, dim_feedforward, dropout, activation):
         super(SPOTERTransformerDecoderLayer, self).__init__(d_model, nhead, dim_feedforward, dropout, activation)
-
         # del self.self_attn
 
     def forward(self, tgt: torch.Tensor, memory: torch.Tensor, tgt_mask: Optional[torch.Tensor] = None,
@@ -41,28 +41,33 @@ class SPOTERTransformerDecoderLayer(nn.TransformerDecoderLayer):
         return tgt
 
 
-class LandmarkEmbedding(nn.Module):
-    def __init__(self, num_hid=108, max_len=204, kernel_size=11):
-        super(LandmarkEmbedding, self).__init__()
-        self.frame_wise_pos = nn.Parameter(frame_wise_embedding_matrix(max_len, num_hid))
+class FeatureExtractor(nn.Module):
+    def __init__(self, num_hid=108, kernel_size=9):
+        super(FeatureExtractor, self).__init__()
+        # self.frame_wise_pos = nn.Parameter(frame_embedding(max_len, num_hid))
         self.num_hid = num_hid
-        self.conv1 = nn.Conv2d(num_hid//2, num_hid, kernel_size=kernel_size, padding=(kernel_size - 1) // 2)
-        self.conv2 = nn.Conv2d(num_hid, num_hid, kernel_size=kernel_size, padding=(kernel_size - 1) // 2)
-        self.conv3 = nn.Conv2d(num_hid, num_hid, kernel_size=kernel_size, padding=(kernel_size - 1) // 2)
+        self.conv1 = nn.Conv1d(num_hid, num_hid, kernel_size=kernel_size, padding=(kernel_size - 1) // 2, stride=1)
+        self.conv2 = nn.Conv1d(num_hid, num_hid, kernel_size=kernel_size-2, padding=(kernel_size - 3) // 2, stride=1)
+        self.conv3 = nn.Conv1d(num_hid, num_hid, kernel_size=kernel_size-4, padding=(kernel_size - 5) // 2, stride=1)
+        self.conv4 = nn.Conv1d(num_hid, num_hid, kernel_size=kernel_size-6, padding=(kernel_size - 7) // 2, stride=1)
+
+        self.bn1 = nn.BatchNorm1d(num_hid, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True)
+        self.bn2 = nn.BatchNorm1d(num_hid, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True)
+        self.bn3 = nn.BatchNorm1d(num_hid, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True)
+        self.bn4 = nn.BatchNorm1d(num_hid, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True)
 
     def forward(self, x):
-        x = self.conv1(x)
-        x = F.relu(x)
-        x = self.conv2(x)
-        x = F.relu(x)
-        x = self.conv3(x)
-        x = F.relu(x)
-
-        x = x * torch.sqrt(torch.tensor(self.num_hid, dtype=torch.float32))
-        print(x.shape)
-        x = x + self.frame_wise_pos
-
-        return x
+          # Turn (seq_len x batch_size x input_size) into (batch_size x input_size x seq_len) for CNN
+        x = x.permute(1, 2, 0)    # (16, 108, 204)
+        x = x.to(torch.float32)
+        out = F.relu(self.bn1(self.conv1(x)))
+        out = F.relu(self.bn2(self.conv2(out)))
+        out = F.relu(self.bn3(self.conv3(out)))
+        out = F.relu(self.bn4(self.conv4(out)))
+        out = out.permute(2, 0, 1)      # (204,16,108)
+        out = out * torch.sqrt(torch.tensor(self.num_hid, dtype=torch.float32))
+        # x = x + self.frame_wise_pos
+        return out
 
 
 class SPOTER(nn.Module):
@@ -71,41 +76,34 @@ class SPOTER(nn.Module):
     of skeletal data.
     """
 
-    def __init__(self, num_classes, num_seq_elements=108):
-        super().__init__()
-        self.landmark_embedding = LandmarkEmbedding(num_hid=108, max_len=204, kernel_size=11)
-        # self.frame_wise_pos = nn.Parameter(frame_wise_embedding_matrix())
-        self.class_query = nn.Parameter(torch.rand(1, num_seq_elements))
-        self.transformer = nn.Transformer(num_seq_elements, 9, 6, 6)
-        self.linear_class = nn.Linear(num_seq_elements, num_classes)
-
-        # Deactivate the initial attention decoder mechanism
-        custom_decoder_layer = SPOTERTransformerDecoderLayer(self.transformer.d_model, self.transformer.nhead, 2048,
-                                                             0.1, "relu")
+    def __init__(self, num_classes, num_hid=108, batch_size=16):
+        super(SPOTER, self).__init__()
+        # self.feature_extractor = FeatureExtractor(num_hid=108, kernel_size=7)
+        self.pos_embedding = nn.Parameter(self.get_encoding_table())
+        self.class_query = nn.Parameter(torch.rand(1, 1, num_hid))
+        self.transformer = nn.Transformer(num_hid, 9, 6, 6)
+        self.linear_class = nn.Linear(num_hid, num_classes)
+        custom_decoder_layer = SPOTERTransformerDecoderLayer(self.transformer.d_model, self.transformer.nhead, 2048, 0.1, "relu")
         self.transformer.decoder.layers = _get_clones(custom_decoder_layer, self.transformer.decoder.num_layers)
 
+    @staticmethod
+    def get_encoding_table(num_hid=108, num_frame=204):
+        torch.manual_seed(42)
+        tensor_shape = (num_frame, num_hid)
+        frame_pos = torch.rand(tensor_shape)
+        for i in range(tensor_shape[0]):
+            for j in range(1, tensor_shape[1]):
+                frame_pos[i, j] = frame_pos[i, j - 1]
+        frame_pos = frame_pos.unsqueeze(1)
+
+        return frame_pos
+
     def forward(self, inputs):
-        # new_inputs = torch.unsqueeze(inputs.flatten(start_dim=1), 1).float()
-        print(inputs.shape)
-        landmark_embedding_output = self.landmark_embedding(inputs.float())
-        print(landmark_embedding_output.shape)
-        transformer_output = self.transformer(landmark_embedding_output, self.class_query.unsqueeze(0)).transpose(0, 1)
-        out = self.linear_class(transformer_output)
+        new_inputs = inputs.view(inputs.size(0), inputs.size(1), inputs.size(2)*inputs.size(3)) # (204,16,108) seq_len, batch_size ,feature_size
+        new_inputs = new_inputs.permute(1, 0, 2).type(dtype=torch.float32)
+        # feature_map = self.feature_extractor(new_inputs)
+        # transformer_in = feature_map + self.pos_embedding
+        transformer_in = new_inputs + self.pos_embedding
+        transformer_output = self.transformer(transformer_in, self.class_query.repeat(1, new_inputs.size(1), 1)).transpose(0, 1)
+        out = self.linear_class(transformer_output).squeeze()
         return out
-
-
-def frame_wise_embedding_matrix(num_frame=204, num_seq_elements=108):
-    torch.manual_seed(42)
-    tensor_shape = (num_frame, num_seq_elements)
-    frame_pos = torch.rand(tensor_shape)
-    for i in range(tensor_shape[0]):
-        for j in range(1, tensor_shape[1]):
-            frame_pos[i, j] = frame_pos[i, j - 1]
-
-    res = frame_pos.unsqueeze(1)
-
-    return res
-
-
-if __name__ == "__main__":
-    pass
