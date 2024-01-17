@@ -7,6 +7,7 @@ import torch.nn as nn
 from typing import Optional
 
 import torch.nn.functional as F
+import transformer
 
 
 def _get_clones(mod, n):
@@ -94,16 +95,25 @@ class SPOTER(nn.Module):
         for i in range(tensor_shape[0]):
             for j in range(1, tensor_shape[1]):
                 frame_pos[i, j] = frame_pos[i, j - 1]
-        frame_pos = frame_pos.unsqueeze(1)
-
+        frame_pos = frame_pos.unsqueeze(1) # (seq_len, 1, feature_size): (204, 1, 108)
         return frame_pos
 
     def forward(self, inputs):
-        new_inputs = inputs.view(inputs.size(0), inputs.size(1), inputs.size(2)*inputs.size(3)) # (204,16,108) seq_len, batch_size ,feature_size
+
+        # (batch_size, seq_len, respected_feature_size, coordinates): (24, 204, 54, 2)
+        # -> (batch_size, seq_len, feature_size):  (24, 204, 108)
+        new_inputs = inputs.view(inputs.size(0), inputs.size(1), inputs.size(2)*inputs.size(3))
+
+        # (batch_size, seq_len, feature_size) : (24, 204, 108)
+        # -> (seq_len, batch_size, feature_size): (204, 24, 108)
         new_inputs = new_inputs.permute(1, 0, 2).type(dtype=torch.float32)
+
         # feature_map = self.feature_extractor(new_inputs)
         # transformer_in = feature_map + self.pos_embedding
-        transformer_in = new_inputs + self.pos_embedding
+        transformer_in = new_inputs + self.pos_embedding  # Shape remains the same
+
+        # (seq_len, batch_size, feature_size) -> (batch_size, 1, feature_size): (24, 1, 108)
         transformer_output = self.transformer(transformer_in, self.class_query.repeat(1, new_inputs.size(1), 1)).transpose(0, 1)
+        # (batch_size, 1, feature_size) -> (batch_size, num_class): (24, 100)
         out = self.linear_class(transformer_output).squeeze()
         return out
