@@ -109,40 +109,4 @@ def rectify_finger_abduction_and_addiction(dataset_path, aa_active_motion_table_
     num_frame_per_sample = len(dataset.at[1, 'leftEar_X'])
     compute_statistics(num_frame_per_sample, len(dataset), total_num_rectified_keypoints, total_num_rectified_hands,
                        rectified_frame, rectified_row)
-    # rectified_keypoints_percentage = 1.5515386710239651%, rectified_hands_percentage = 15.768872549019608%,
-    # rectified_data = 97.375% and rectified_frame = 21.43235294117647%, where total_num_keypoints = 44064000,
-    # num_rectified_keypoints = 683670
     return dataset
-
-
-if __name__ == "__main__":
-    motion_table_path = r"D:\Skeleton_based_SLR\active_motion\abduction_adduction_ranges.csv"
-    input_path = r"D:\Skeleton_based_SLR\datasets\rectified\flexion_and_extension\rectified_fe_04_balanced_WLASL100_SMOTE.csv"  # rectified_data_percentage = 31.53% # rectified_keypoint_percentatge = 8%
-    rectified_dataset = rectify_finger_abduction_and_addiction(input_path, motion_table_path, 0.4)
-    output_path = r"D:\Skeleton_based_SLR\datasets\rectified\combination\rectified_aafe_04_balanced_WLASL100_SMOTE.csv"
-    rectified_dataset.to_csv(output_path, index=False)
-
-    # # alpha = 0.2
-    # rectified_dataset = rectify_finger_abduction_and_addiction(input_path, motion_table_path, 0.2)
-    # output_path_2 = r"D:\Skeleton_based_SLR\datasets\rectified\rectified_aa_02_balanced_WLASL100_SMOTE.csv"
-    # rectified_dataset.to_csv(output_path_2, index=False)
-    #
-    # # alpha = 0.4
-    # rectified_dataset = rectify_finger_abduction_and_addiction(input_path, motion_table_path, 0.4)
-    # output_path_4 = r"D:\Skeleton_based_SLR\datasets\rectified\rectified_aa_04_balanced_WLASL100_SMOTE.csv"
-    # rectified_dataset.to_csv(output_path_4, index=False)
-    #
-    # # alpha = 0.6
-    # rectified_dataset = rectify_finger_abduction_and_addiction(input_path, motion_table_path, 0.6)
-    # output_path_6 = r"D:\Skeleton_based_SLR\datasets\rectified\rectified_aa_06_balanced_WLASL100_SMOTE.csv"
-    # rectified_dataset.to_csv(output_path_6, index=False)
-    #
-    # # alpha = 0.8
-    # rectified_dataset = rectify_finger_abduction_and_addiction(input_path, motion_table_path, 0.8)
-    # output_path_8 = r"D:\Skeleton_based_SLR\datasets\rectified\rectified_aa_08_balanced_WLASL100_SMOTE.csv"
-    # rectified_dataset.to_csv(output_path_8, index=False)
-    #
-    # # alpha = 1
-    # rectified_dataset = rectify_finger_abduction_and_addiction(input_path, motion_table_path, 1)
-    # output_path_1 = r"D:\Skeleton_based_SLR\datasets\rectified\rectified_aa_1_balanced_WLASL100_SMOTE.csv"
-    # rectified_dataset.to_csv(output_path_1, index=False)
