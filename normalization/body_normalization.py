@@ -140,7 +140,7 @@ def normalize_single_dict(row: dict):
     original_row = row
 
     last_starting_point, last_ending_point = None, None
-
+    has_problem = False
     # Treat each element of the sequence (analyzed frame) individually
     for sequence_index in range(sequence_size):
 
@@ -202,7 +202,9 @@ def normalize_single_dict(row: dict):
                 continue
 
             if (ending_point[0] - starting_point[0]) == 0 or (starting_point[1] - ending_point[1]) == 0:
-                logging.info("Problematic normalization")
+                if not has_problem:
+                    logging.info("Problematic normalization")
+                has_problem = True
                 valid_sequence = False
                 break
 
