@@ -33,7 +33,8 @@ def get_default_args():
                         help="Hidden dimension of the underlying Transformer model")
     parser.add_argument("--seed", type=int, default=379,
                         help="Seed with which to initialize all the random components of the training")
-
+    parser.add_argument("--attn_type", type=str, default='prob',
+                        help="The attention mechanism used by the model")
     # Data
     parser.add_argument("--training_set_path", type=str, default="", help="Path to the training dataset CSV file")
     parser.add_argument("--testing_set_path", type=str, default="", help="Path to the testing dataset CSV file")
@@ -42,7 +43,7 @@ def get_default_args():
                              "gradually enlarging training set experiment from the paper)")
 
     parser.add_argument("--validation_set", type=str, choices=["from-file", "split-from-train", "none"],
-                        default="from-file",
+                        default="none",
                         help="Type of validation set construction. See README for further rederence")
     parser.add_argument("--validation_set_size", type=float,
                         help="Proportion of the training set to be split as validation set, if 'validation_size' is set"
@@ -108,16 +109,15 @@ def train(args):
         print("Using cuda")
 
     # Construct the model
-    slrt_model = SPOTER(num_classes=args.num_classes, num_hid=args.num_seq_elements, batch_size=args.batch_size)
+    slrt_model = SPOTER(num_classes=args.num_classes, num_hid=args.num_seq_elements, batch_size=args.batch_size,
+                        attn_type=args.attn_type)
     slrt_model.train(True)
     slrt_model.to(device)
 
     # Construct the other modules
     cel_criterion = nn.CrossEntropyLoss()
-    # optimizer = optim.SGD(slrt_model.parameters(), lr=args.lr)
-    # scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=args.scheduler_factor, patience=args.scheduler_patience)
     optimizer = torch.optim.AdamW(slrt_model.parameters(), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-8)
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[60, 80], gamma=0.1)
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[60, 80], gamma=0.1) #40, 60, 80
 
     # Ensure that the path for checkpointing and for images both exist
     Path("out-checkpoints/" + args.experiment_name + "/").mkdir(parents=True, exist_ok=True)
@@ -180,9 +180,11 @@ def train(args):
         logging.info("Starting " + args.experiment_name + "...\n\n")
 
     for epoch in range(args.epochs):
+        # start_time
         train_loss, _, _, train_acc = train_epoch(slrt_model, train_loader, cel_criterion, optimizer, device,
                                                   scheduler=scheduler)
-
+        # end_time
+        # end_time - start_time
         losses.append(train_loss.item() / len(train_loader))
         train_accs.append(train_acc)
 

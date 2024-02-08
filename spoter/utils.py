@@ -11,12 +11,14 @@ def train_epoch(model, dataloader, criterion, optimizer, device, scheduler=None)
     running_loss = 0.0
 
     for i, data in enumerate(dataloader):
-        inputs, labels = data
-        inputs = inputs.to(device)
+        l_hand, r_hand, body, labels = data
+        l_hand = l_hand.to(device)
+        r_hand = r_hand.to(device)
+        body = body.to(device)
         labels = labels.to(device, dtype=torch.long)
 
         optimizer.zero_grad()
-        outputs = model(inputs)
+        outputs = model(l_hand, r_hand, body)
 
         loss = criterion(outputs, labels.squeeze(1))
         loss.backward()
@@ -42,11 +44,13 @@ def evaluate(model, dataloader, device, print_stats=False):
 
     with torch.no_grad():
         for i, data in enumerate(dataloader):
-            inputs, labels = data
-            inputs = inputs.to(device)
+            l_hand, r_hand, body, labels = data
+            l_hand = l_hand.to(device)
+            r_hand = r_hand.to(device)
+            body = body.to(device)
             labels = labels.to(device, dtype=torch.long)
 
-            outputs = model(inputs)
+            outputs = model(l_hand, r_hand, body)
 
             # Statistics
             _, preds = torch.max(outputs, 1)
@@ -74,11 +78,13 @@ def evaluate_top_k(model, dataloader, device, k=5):
 
     with torch.no_grad():
         for i, data in enumerate(dataloader):
-            inputs, labels = data
-            inputs = inputs.to(device)
+            l_hand, r_hand, body, labels = data
+            l_hand = l_hand.to(device)
+            r_hand = r_hand.to(device)
+            body = body.to(device)
             labels = labels.to(device, dtype=torch.long)
 
-            outputs = model(inputs)
+            outputs = model(l_hand, r_hand, body)
 
             # Top-k accuracy
             _, top_k_preds = torch.topk(outputs, k)
