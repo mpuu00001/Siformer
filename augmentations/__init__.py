@@ -37,10 +37,11 @@ def __dictionary_to_numpy(landmarks_dict: dict) -> np.ndarray:
     Supplementary method converting dictionaries of body landmark data into respective NumPy arrays. The resulting array
     will match the order of the BODY_IDENTIFIERS list.
     """
+    sequence_len = len(next(iter(landmarks_dict.values()), None))
 
-    output = np.empty(shape=(len(landmarks_dict["leftEar"]), len(BODY_IDENTIFIERS), 2))
+    output = np.empty(shape=(sequence_len, len(landmarks_dict), 2))
 
-    for landmark_index, identifier in enumerate(BODY_IDENTIFIERS):
+    for landmark_index, identifier in enumerate(landmarks_dict):
         output[:, landmark_index, 0] = np.array(landmarks_dict[identifier])[:, 0]
         output[:, landmark_index, 1] = np.array(landmarks_dict[identifier])[:, 1]
 
