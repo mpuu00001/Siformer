@@ -2,7 +2,7 @@ import copy
 import torch
 
 import torch.nn as nn
-from typing import Optional, Any, Union, Callable
+from typing import Optional, Union, Callable
 from torch import Tensor
 
 import torch.nn.functional as F
@@ -21,7 +21,8 @@ class FeatureIsolatedTransformer(nn.Transformer):
     def __init__(self, d_model_list: list, nhead_list: list, num_encoder_layers: int = 2, num_decoder_layers: int = 2,
                  dim_feedforward: int = 2048, dropout: float = 0.1,
                  activation: Union[str, Callable[[Tensor], Tensor]] = F.relu,
-                 selected_attn: str = 'full', output_attention: str = True):
+                 selected_attn: str = 'full', output_attention: str = True, inner_classifiers: nn.ModuleList = None,
+                 patient=0):
 
         super(FeatureIsolatedTransformer, self).__init__(sum(d_model_list), nhead_list[-1], num_encoder_layers,
                                                          num_decoder_layers, dim_feedforward, dropout, activation)
@@ -37,7 +38,7 @@ class FeatureIsolatedTransformer(nn.Transformer):
         self.l_hand_encoder = self.get_custom_encoder(d_model_list[0], nhead_list[0])
         self.r_hand_encoder = self.get_custom_encoder(d_model_list[1], nhead_list[1])
         self.body_encoder = self.get_custom_encoder(d_model_list[2], nhead_list[2])
-        self.decoder = self.get_custom_decoder(nhead_list[-1])
+        self.decoder = self.get_custom_decoder(nhead_list[-1], inner_classifiers, patient)
         self._reset_parameters()
 
     def get_custom_encoder(self, f_d_model: int, nhead: int):
@@ -58,10 +59,11 @@ class FeatureIsolatedTransformer(nn.Transformer):
         encoder_norm = LayerNorm(f_d_model)
         return TransformerEncoder(encoder_layer, self.num_encoder_layers, encoder_norm)
 
-    def get_custom_decoder(self, nhead):
+    def get_custom_decoder(self, nhead, inner_classifier, patient):
         decoder_layer = DecoderLayer(self.d_model, nhead, self.d_ff)
         decoder_norm = LayerNorm(self.d_model)
-        return TransformerDecoder(decoder_layer, self.num_decoder_layers, decoder_norm)
+        return Decoder(decoder_layer, self.num_decoder_layers, norm=decoder_norm,
+                       patient=patient, inner_classifier=inner_classifier, )
 
     def checker(self, full_src, tgt, is_batched):
         if not self.batch_first and full_src.size(1) != tgt.size(1) and is_batched:
@@ -75,7 +77,7 @@ class FeatureIsolatedTransformer(nn.Transformer):
                 memory_mask: Optional[Tensor] = None, src_key_padding_mask: Optional[Tensor] = None,
                 tgt_key_padding_mask: Optional[Tensor] = None, memory_key_padding_mask: Optional[Tensor] = None,
                 src_is_causal: Optional[bool] = None, tgt_is_causal: Optional[bool] = None,
-                memory_is_causal: bool = False) -> Tensor:
+                memory_is_causal: bool = False, training=True) -> Tensor:
 
         full_src = torch.cat(src, dim=-1)
         self.checker(full_src, tgt, full_src.dim() == 3)
@@ -88,7 +90,66 @@ class FeatureIsolatedTransformer(nn.Transformer):
 
         output = self.decoder(tgt, full_memory, tgt_mask=tgt_mask, memory_mask=memory_mask,
                               tgt_key_padding_mask=tgt_key_padding_mask,
-                              memory_key_padding_mask=memory_key_padding_mask)
+                              memory_key_padding_mask=memory_key_padding_mask, training=training)
+        return output
+
+
+class Decoder(nn.TransformerDecoder):
+    __constants__ = ['norm']
+
+    def __init__(self, decoder_layer, num_layers, norm=None, patient=0, inner_classifier=None):
+        super(Decoder, self).__init__(decoder_layer, num_layers, norm)
+        self.patient = patient
+        self.inner_classifier = inner_classifier
+
+    def forward(self, tgt: Tensor, memory: Tensor, tgt_mask: Optional[Tensor] = None,
+                memory_mask: Optional[Tensor] = None, tgt_key_padding_mask: Optional[Tensor] = None,
+                memory_key_padding_mask: Optional[Tensor] = None, tgt_is_causal: Optional[bool] = None,
+                memory_is_causal: bool = False, training=True) -> Tensor:
+
+        output = tgt
+
+        if training or self.patient == 0:
+            for i, mod in enumerate(self.layers):
+                output = mod(output, memory, tgt_mask=tgt_mask,
+                             memory_mask=memory_mask,
+                             tgt_key_padding_mask=tgt_key_padding_mask,
+                             memory_key_padding_mask=memory_key_padding_mask)
+                mod_output = output
+                if self.norm is not None:
+                    mod_output = self.norm(mod_output)
+                _ = self.inner_classifier[i](mod_output).squeeze()
+        else:
+            patient_counter = 0
+            patient_result = None
+            calculated_layer_num = 0
+            for i, mod in enumerate(self.layers):
+                calculated_layer_num += 1
+                output = mod(output, memory, tgt_mask=tgt_mask,
+                             memory_mask=memory_mask,
+                             tgt_key_padding_mask=tgt_key_padding_mask,
+                             memory_key_padding_mask=memory_key_padding_mask)
+
+                mod_output = output
+                if self.norm is not None:
+                    mod_output = self.norm(mod_output)
+                classifier_out = self.inner_classifier[i](mod_output).squeeze()
+                labels = classifier_out.detach().argmax(dim=1)
+
+                if patient_result is not None:
+                    patient_labels = patient_result.detach().argmax(dim=1)
+                if (patient_result is not None) and torch.all(labels.eq(patient_labels)):
+                    patient_counter += 1
+                else:
+                    patient_counter = 0
+
+                patient_result = classifier_out
+                if patient_counter == self.patient:
+                    break
+
+        if self.norm is not None:
+            output = self.norm(output)
+
         return output
 
 
@@ -131,21 +192,28 @@ class SPOTER(nn.Module):
     of skeletal data.
     """
 
-    def __init__(self, num_classes, num_hid=108, batch_size=24, attn_type='prob'):
+    def __init__(self, num_classes, num_hid=108, attn_type='prob', num_encoder_layers=6,
+                 num_decoder_layers=6):
         super(SPOTER, self).__init__()
         print(f"The used pytorch version: {torch.__version__}")
         # self.feature_extractor = FeatureExtractor(num_hid=108, kernel_size=7)
-        self.l_hand_embedding = nn.Parameter(self.get_encoding_table(d_model=42))
-        self.r_hand_embedding = nn.Parameter(self.get_encoding_table(d_model=42))
-        self.body_embedding = nn.Parameter(self.get_encoding_table(d_model=24))
+        self.l_hand_encoding = nn.Parameter(self.get_encoding_table(d_model=42))
+        self.r_hand_encoding = nn.Parameter(self.get_encoding_table(d_model=42))
+        self.body_encoding = nn.Parameter(self.get_encoding_table(d_model=24))
 
+        self.transformer = FeatureIsolatedTransformer(
+            [42, 42, 24], [3, 3, 2, 9], selected_attn=attn_type, num_encoder_layers=num_encoder_layers,
+            num_decoder_layers=num_decoder_layers, inner_classifiers=nn.ModuleList([
+                nn.Linear(num_hid, num_classes) for _ in range(num_decoder_layers)
+            ]), patient=1
+        )
         self.class_query = nn.Parameter(torch.rand(1, 1, num_hid))
-        self.transformer = FeatureIsolatedTransformer([42, 42, 24], [3, 3, 2, 9], selected_attn=attn_type)
         self.linear_class = nn.Linear(num_hid, num_classes)
+
         # custom_decoder_layer = DecoderLayer(self.transformer.d_model, self.transformer.nhead)
         # self.transformer.decoder.layers = _get_clones(custom_decoder_layer, self.transformer.decoder.num_layers)
 
-    def forward(self, l_hand, r_hand, body):
+    def forward(self, l_hand, r_hand, body, training):
         batch_size = l_hand.size(0)
         # (batch_size, seq_len, respected_feature_size, coordinates): (24, 204, 54, 2)
         # -> (batch_size, seq_len, feature_size):  (24, 204, 108)
@@ -161,15 +229,14 @@ class SPOTER(nn.Module):
 
         # feature_map = self.feature_extractor(new_inputs)
         # transformer_in = feature_map + self.pos_embedding
-        l_hand_in = new_l_hand + self.l_hand_embedding  # Shape remains the same
-        r_hand_in = new_r_hand + self.r_hand_embedding  # Shape remains the same
-        body_in = new_body + self.body_embedding  # Shape remains the same
+        l_hand_in = new_l_hand + self.l_hand_encoding  # Shape remains the same
+        r_hand_in = new_r_hand + self.r_hand_encoding  # Shape remains the same
+        body_in = new_body + self.body_encoding  # Shape remains the same
 
         # (seq_len, batch_size, feature_size) -> (batch_size, 1, feature_size): (24, 1, 108)
-        transformer_output = self.transformer([l_hand_in, r_hand_in, body_in],
-                                              self.class_query.repeat(1, batch_size, 1)).transpose(0, 1)
-        # print("transformer_output.shape")
-        # print(transformer_output.shape)
+        transformer_output = self.transformer(
+            [l_hand_in, r_hand_in, body_in], self.class_query.repeat(1, batch_size, 1), training=training
+        ).transpose(0, 1)
 
         # (batch_size, 1, feature_size) -> (batch_size, num_class): (24, 100)
         out = self.linear_class(transformer_output).squeeze()

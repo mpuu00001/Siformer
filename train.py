@@ -109,8 +109,7 @@ def train(args):
         print("Using cuda")
 
     # Construct the model
-    slrt_model = SPOTER(num_classes=args.num_classes, num_hid=args.num_seq_elements, batch_size=args.batch_size,
-                        attn_type=args.attn_type)
+    slrt_model = SPOTER(num_classes=args.num_classes, num_hid=args.num_seq_elements, attn_type=args.attn_type)
     slrt_model.train(True)
     slrt_model.to(device)
 
