@@ -78,6 +78,10 @@ def get_default_args():
     parser.add_argument("--plot_lr", type=bool, default=True,
                         help="Determines whether the LR should be plotted at the end")
 
+    # Training time
+    parser.add_argument("--record_training_time", type=bool, default=True,
+                        help="Determines whether continuous statistics of training time should be record")
+
     return parser
 
 
@@ -188,8 +192,10 @@ def train(args):
                                                   scheduler=scheduler)
         end_time = time.time()
         elapsed_time = end_time - start_time
-        time_list.append(elapsed_time)
-        total_training_time += elapsed_time
+
+        if args.record_training_time:
+            time_list.append(elapsed_time)
+            total_training_time += elapsed_time
 
         if val_loader:
             slrt_model.train(False)
@@ -213,9 +219,17 @@ def train(args):
             print(
                 "[" + str(epoch + 1) + "] TRAIN  loss: " + str(train_loss.item() / len(train_loader)) + " acc: " + str(
                     train_acc))
+            print(
+                f"[ {str(epoch + 1)} ] TRAIN time: {str(elapsed_time)} seconds | "
+                f"{str(datetime.timedelta(seconds=elapsed_time))} "
+            )
             logging.info(
                 "[" + str(epoch + 1) + "] TRAIN  loss: " + str(train_loss.item() / len(train_loader)) + " acc: " + str(
                     train_acc))
+            logging.info(
+                f"[{str(epoch + 1)}] TRAIN time: {str(elapsed_time)} seconds | "
+                f"{str(datetime.timedelta(seconds=elapsed_time))} "
+            )
 
             if val_loader:
                 print("[" + str(epoch + 1) + "] VALIDATION  acc: " + str(val_acc))
@@ -275,18 +289,11 @@ def train(args):
 
         if val_loader:
             ax.plot(range(1, len(val_accs) + 1), val_accs, c="#E0A938", label="Validation accuracy")
-        ax.set_ylabel("Accuracy / Loss")
-
-        ax2 = ax.twinx()
-        ax2.plot(range(1, len(time_list) + 1), time_list, c="blue", label="Training Time")
-        ax2.set_ylabel('Seconds')
 
         ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-        ax.set(xlabel="Epoch", title="")
-        lines, labels = ax.get_legend_handles_labels()
-        lines2, labels2 = ax2.get_legend_handles_labels()
-        plt.legend(lines + lines2, labels + labels2, loc="upper center", bbox_to_anchor=(0.5, 1.05), ncol=4,
-                   fancybox=True, shadow=True,
+
+        ax.set(xlabel="Epoch", ylabel="Accuracy / Loss", title="")
+        plt.legend(loc="upper center", bbox_to_anchor=(0.5, 1.05), ncol=4, fancybox=True, shadow=True,
                    fontsize="xx-small")
         ax.grid()
 
@@ -300,6 +307,15 @@ def train(args):
         ax1.grid()
 
         fig1.savefig("out-img/" + args.experiment_name + "_lr.png")
+
+    # PLOT 2: Training time
+    if args.record_training_time:
+        fig1, ax2 = plt.subplots()
+        ax2.plot(range(1, len(time_list) + 1), time_list, label="Training Time")
+        ax2.set(xlabel="Epoch", ylabel="Second", title="")
+        ax2.grid()
+
+        fig1.savefig("out-img/" + args.experiment_name + "_tt.png")
 
     print("\nAny desired statistics have been plotted.\nThe experiment is finished.")
     logging.info("\nAny desired statistics have been plotted.\nThe experiment is finished.")

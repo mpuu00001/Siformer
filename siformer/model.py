@@ -108,8 +108,6 @@ class SiFormer(nn.Module):
         self.class_query = nn.Parameter(torch.rand(1, 1, num_hid))
         self.transformer = FeatureIsolatedTransformer([42, 42, 24], [3, 3, 2, 9], selected_attn=attn_type)
         self.linear_class = nn.Linear(num_hid, num_classes)
-        # custom_decoder_layer = DecoderLayer(self.transformer.d_model, self.transformer.nhead)
-        # self.transformer.decoder.layers = _get_clones(custom_decoder_layer, self.transformer.decoder.num_layers)
 
     def forward(self, l_hand, r_hand, body):
         batch_size = l_hand.size(0)
