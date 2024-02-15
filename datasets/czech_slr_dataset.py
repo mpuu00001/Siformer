@@ -163,6 +163,21 @@ class CzechSLRDataset(torch_data.Dataset):
             r_hand_depth_map = self.transform(r_hand_depth_map)  # (204, 21, 2)
             body_depth_map = self.transform(body_depth_map)  # (204, 12, 2)
 
+        # print(f"body_depth_map.shape {body_depth_map.shape}")
+        # print(f"l_hand_depth_map.shape {l_hand_depth_map.shape}")
+        # print(f"r_hand_depth_map.shape {r_hand_depth_map.shape}")
+
+        # print("All ok now")
+        # print(error)
+        #
+        # depth_map = dictionary_to_tensor(depth_map, HAND_IDENTIFIERS+BODY_IDENTIFIERS)
+        #
+        # # Move the landmark position interval to improve performance
+        # depth_map = depth_map - 0.5
+        #
+        # if self.transform:
+        #     depth_map = self.transform(depth_map)
+
         return l_hand_depth_map, r_hand_depth_map, body_depth_map, label
 
     def __len__(self):

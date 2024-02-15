@@ -10,8 +10,7 @@ from torch.nn.modules.normalization import LayerNorm
 from torch.nn.modules.transformer import TransformerEncoder, TransformerEncoderLayer, TransformerDecoder
 from spoter.attention import AttentionLayer, ProbAttention, FullAttention
 
-is_dec_checked = False
-is_enc_checked = False
+isChecked = False
 
 
 def _get_clones(mod, n):
@@ -19,11 +18,11 @@ def _get_clones(mod, n):
 
 
 class FeatureIsolatedTransformer(nn.Transformer):
-    def __init__(self, d_model_list: list, nhead_list: list, num_encoder_layers: int = 2, num_decoder_layers: int = 2,
+    def __init__(self, d_model_list: list, nhead_list: list, num_encoder_layers: int = 6, num_decoder_layers: int = 6,
                  dim_feedforward: int = 2048, dropout: float = 0.1,
                  activation: Union[str, Callable[[Tensor], Tensor]] = F.relu,
-                 selected_attn: str = 'prob', output_attention: str = True, inner_classifiers: nn.ModuleList = None,
-                 patient=0):
+                 selected_attn: str = 'full', output_attention: str = True, inner_classifiers: nn.ModuleList = None,
+                 patient=1):
 
         super(FeatureIsolatedTransformer, self).__init__(sum(d_model_list), nhead_list[-1], num_encoder_layers,
                                                          num_decoder_layers, dim_feedforward, dropout, activation)
@@ -44,30 +43,28 @@ class FeatureIsolatedTransformer(nn.Transformer):
 
     def get_custom_encoder(self, f_d_model: int, nhead: int):
         encoder_layer = TransformerEncoderLayer(f_d_model, nhead, self.d_ff, self.dropout, self.activation)
-        global is_enc_checked
-        if not is_enc_checked:
-            print(f'self.selected_attn {self.selected_attn}')
-            is_enc_checked = True
-
         if self.selected_attn == 'prob':
             encoder_layer.self_attn = AttentionLayer(
                 ProbAttention(output_attention=self.output_attention),
                 f_d_model, nhead, mix=False
             )
+            print(f'self.selected_attn {self.selected_attn}')
 
         else:
             encoder_layer.self_attn = AttentionLayer(
                 FullAttention(output_attention=self.output_attention),
                 f_d_model, nhead, mix=False
             )
+            print(f'self.selected_attn {self.selected_attn}')
         encoder_norm = LayerNorm(f_d_model)
-        return TransformerEncoder(encoder_layer, self.num_encoder_layers, encoder_norm)
+        return TransformerEncoder(encoder_layer, self.num_encoder_layers, norm=encoder_norm)
 
     def get_custom_decoder(self, nhead, inner_classifier, patient):
         decoder_layer = DecoderLayer(self.d_model, nhead, self.d_ff)
         decoder_norm = LayerNorm(self.d_model)
-        return Decoder(decoder_layer, self.num_decoder_layers, norm=decoder_norm,
-                       patient=patient, inner_classifier=inner_classifier, )
+        # return Decoder(decoder_layer, self.num_decoder_layers, norm=decoder_norm,
+        #                patient=patient, inner_classifier=inner_classifier, )
+        return TransformerDecoder(decoder_layer, self.num_decoder_layers, norm=decoder_norm)
 
     def checker(self, full_src, tgt, is_batched):
         if not self.batch_first and full_src.size(1) != tgt.size(1) and is_batched:
@@ -85,6 +82,7 @@ class FeatureIsolatedTransformer(nn.Transformer):
 
         full_src = torch.cat(src, dim=-1)
         self.checker(full_src, tgt, full_src.dim() == 3)
+        # print(f"attention in shape: {src[0].shape}")
         l_hand_memory = self.l_hand_encoder(src[0], mask=src_mask, src_key_padding_mask=src_key_padding_mask)
         r_hand_memory = self.r_hand_encoder(src[1], mask=src_mask, src_key_padding_mask=src_key_padding_mask)
         body_memory = self.body_encoder(src[2], mask=src_mask, src_key_padding_mask=src_key_padding_mask)
@@ -93,14 +91,14 @@ class FeatureIsolatedTransformer(nn.Transformer):
 
         output = self.decoder(tgt, full_memory, tgt_mask=tgt_mask, memory_mask=memory_mask,
                               tgt_key_padding_mask=tgt_key_padding_mask,
-                              memory_key_padding_mask=memory_key_padding_mask, training=training)
+                              memory_key_padding_mask=memory_key_padding_mask)#, training=training)
         return output
 
 
 class Decoder(nn.TransformerDecoder):
     __constants__ = ['norm']
 
-    def __init__(self, decoder_layer, num_layers, norm=None, patient=0, inner_classifier=None):
+    def __init__(self, decoder_layer, num_layers, norm=None, patient=1, inner_classifier=None):
         super(Decoder, self).__init__(decoder_layer, num_layers, norm)
         self.patient = patient
         self.inner_classifier = inner_classifier
@@ -165,23 +163,27 @@ class DecoderLayer(nn.TransformerDecoderLayer):
     def __init__(self, d_model: int, nhead: int, dim_feedforward: int = 2048, dropout: float = 0.1,
                  activation: Union[str, Callable[[Tensor], Tensor]] = F.relu):
         super(DecoderLayer, self).__init__(d_model, nhead, dim_feedforward, dropout, activation)
+        # Change self.multihead_attn to use Pro-sparse attention
 
     def forward(self, tgt: torch.Tensor, memory: torch.Tensor, tgt_mask: Optional[torch.Tensor] = None,
                 memory_mask: Optional[torch.Tensor] = None, tgt_key_padding_mask: Optional[torch.Tensor] = None,
                 memory_key_padding_mask: Optional[torch.Tensor] = None, tgt_is_causal: Optional[bool] = False,
                 memory_is_causal: Optional[bool] = False) -> torch.Tensor:
-        global is_dec_checked
-        if not is_dec_checked:
+        global isChecked
+        if not isChecked:
             print('Using custom DecoderLayer')
-            is_dec_checked = True
+            isChecked = True
 
-        tgt = self.norm1(tgt + self.dropout1(tgt))
+        tgt = tgt + self.dropout1(tgt)
+        tgt = self.norm1(tgt)
         tgt2 = self.multihead_attn(tgt, memory, memory, attn_mask=memory_mask,
                                    key_padding_mask=memory_key_padding_mask)[0]
-        tgt = self.norm2(tgt + self.dropout2(tgt2))
-        # tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt))))
-        # tgt = tgt + self.dropout3(tgt2)
-        tgt = self.norm3(tgt + self._ff_block(tgt))
+        tgt = tgt + self.dropout2(tgt2)
+        tgt = self.norm2(tgt)
+        tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt))))
+        tgt = tgt + self.dropout3(tgt2)
+        tgt = self.norm3(tgt)
+
         return tgt
 
 
@@ -207,10 +209,7 @@ class SPOTER(nn.Module):
             ]), patient=1
         )
         self.class_query = nn.Parameter(torch.rand(1, 1, num_hid))
-        self.projection = nn.Linear(num_hid, num_classes)
-
-        # custom_decoder_layer = DecoderLayer(self.transformer.d_model, self.transformer.nhead)
-        # self.transformer.decoder.layers = _get_clones(custom_decoder_layer, self.transformer.decoder.num_layers)
+        self.linear_class = nn.Linear(num_hid, num_classes)
 
     def forward(self, l_hand, r_hand, body, training):
         batch_size = l_hand.size(0)
@@ -238,7 +237,7 @@ class SPOTER(nn.Module):
         ).transpose(0, 1)
 
         # (batch_size, 1, feature_size) -> (batch_size, num_class): (24, 100)
-        out = self.projection(transformer_output).squeeze()
+        out = self.linear_class(transformer_output).squeeze()
         return out
 
     @staticmethod
