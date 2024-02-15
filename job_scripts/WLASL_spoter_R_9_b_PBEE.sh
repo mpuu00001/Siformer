@@ -2,10 +2,10 @@
 #
 #SBATCH --job-name=WLASL_spoter_R_9_b_PBEE
 #SBATCH --time=24:00:00
-#SBATCH --mem=16000
+#SBATCH --mem=64000
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:3g.40gb:1
 #SBATCH --partition=gpu.large
 
