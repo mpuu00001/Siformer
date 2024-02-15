@@ -7,6 +7,64 @@ from typing import Optional, Union, Callable
 isChecked = False
 
 
+class Decoder(nn.TransformerDecoder):
+    __constants__ = ['norm']
+
+    def __init__(self, decoder_layer, num_layers, norm=None, patient=1, inner_classifiers=None):
+        super(Decoder, self).__init__(decoder_layer, num_layers, norm)
+        self.patient = patient
+        self.inner_classifiers = inner_classifiers
+
+    def forward(self, tgt: Tensor, memory: Tensor, tgt_mask: Optional[Tensor] = None,
+                memory_mask: Optional[Tensor] = None, tgt_key_padding_mask: Optional[Tensor] = None,
+                memory_key_padding_mask: Optional[Tensor] = None, tgt_is_causal: Optional[bool] = None,
+                memory_is_causal: bool = False, training=True) -> Tensor:
+
+        output = tgt
+        if training or self.patient == 0:
+            for i, mod in enumerate(self.layers):
+                output = mod(output, memory, tgt_mask=tgt_mask,
+                             memory_mask=memory_mask,
+                             tgt_key_padding_mask=tgt_key_padding_mask,
+                             memory_key_padding_mask=memory_key_padding_mask)
+                mod_output = output
+                if self.norm is not None:
+                    mod_output = self.norm(mod_output)
+                _ = self.inner_classifiers[i](mod_output).squeeze()
+        else:
+            patient_counter = 0
+            patient_result = None
+            calculated_layer_num = 0
+            for i, mod in enumerate(self.layers):
+                calculated_layer_num += 1
+                output = mod(output, memory, tgt_mask=tgt_mask,
+                             memory_mask=memory_mask,
+                             tgt_key_padding_mask=tgt_key_padding_mask,
+                             memory_key_padding_mask=memory_key_padding_mask)
+
+                mod_output = output
+                if self.norm is not None:
+                    mod_output = self.norm(mod_output)
+                classifier_out = self.inner_classifiers[i](mod_output).squeeze()
+                labels = classifier_out.detach().argmax(dim=1)
+
+                if patient_result is not None:
+                    patient_labels = patient_result.detach().argmax(dim=1)
+                if (patient_result is not None) and torch.all(labels.eq(patient_labels)):
+                    patient_counter += 1
+                else:
+                    patient_counter = 0
+
+                patient_result = classifier_out
+                if patient_counter == self.patient:
+                    break
+
+        if self.norm is not None:
+            output = self.norm(output)
+
+        return output
+
+
 class DecoderLayer(nn.TransformerDecoderLayer):
     """
     Edited TransformerDecoderLayer implementation omitting the redundant self-attention operation as opposed to the

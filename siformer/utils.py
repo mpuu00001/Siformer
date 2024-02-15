@@ -18,7 +18,7 @@ def train_epoch(model, dataloader, criterion, optimizer, device, scheduler=None)
         labels = labels.to(device, dtype=torch.long)
 
         optimizer.zero_grad()
-        outputs = model(l_hand, r_hand, body)#, training=True)
+        outputs = model(l_hand, r_hand, body, training=True)
 
         loss = criterion(outputs, labels.squeeze(1))
         loss.backward()
@@ -50,7 +50,7 @@ def evaluate(model, dataloader, device, print_stats=False):
             body = body.to(device)
             labels = labels.to(device, dtype=torch.long)
 
-            outputs = model(l_hand, r_hand, body)#, training=False)
+            outputs = model(l_hand, r_hand, body, training=False)
 
             # Statistics
             _, preds = torch.max(outputs, 1)
@@ -84,7 +84,7 @@ def evaluate_top_k(model, dataloader, device, k=5):
             body = body.to(device)
             labels = labels.to(device, dtype=torch.long)
 
-            outputs = model(l_hand, r_hand, body)#, training=False)
+            outputs = model(l_hand, r_hand, body, training=False)
 
             # Top-k accuracy
             _, top_k_preds = torch.topk(outputs, k)

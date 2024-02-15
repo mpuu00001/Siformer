@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from torch.nn.modules.normalization import LayerNorm
 from torch.nn.modules.transformer import TransformerEncoder, TransformerEncoderLayer, TransformerDecoder
 from siformer.attention import AttentionLayer, ProbAttention, FullAttention
-from siformer.decoder import DecoderLayer
+from siformer.decoder import DecoderLayer, Decoder
 
 
 def _get_clones(mod, n):
@@ -17,10 +17,11 @@ def _get_clones(mod, n):
 
 
 class FeatureIsolatedTransformer(nn.Transformer):
-    def __init__(self, d_model_list: list, nhead_list: list, num_encoder_layers: int = 2, num_decoder_layers: int = 2,
+    def __init__(self, d_model_list: list, nhead_list: list, num_encoder_layers: int, num_decoder_layers: int,
                  dim_feedforward: int = 2048, dropout: float = 0.1,
                  activation: Union[str, Callable[[Tensor], Tensor]] = F.relu,
-                 selected_attn: str = 'full', output_attention: str = True):
+                 selected_attn: str = 'prob', output_attention: str = True,
+                 inner_classifiers: nn.ModuleList = None, patient: int = 1):
 
         super(FeatureIsolatedTransformer, self).__init__(sum(d_model_list), nhead_list[-1], num_encoder_layers,
                                                          num_decoder_layers, dim_feedforward, dropout, activation)
@@ -36,7 +37,7 @@ class FeatureIsolatedTransformer(nn.Transformer):
         self.l_hand_encoder = self.get_custom_encoder(d_model_list[0], nhead_list[0])
         self.r_hand_encoder = self.get_custom_encoder(d_model_list[1], nhead_list[1])
         self.body_encoder = self.get_custom_encoder(d_model_list[2], nhead_list[2])
-        self.decoder = self.get_custom_decoder(nhead_list[-1])
+        self.decoder = self.get_custom_decoder(nhead_list[-1], inner_classifiers, patient)
         self._reset_parameters()
 
     def get_custom_encoder(self, f_d_model: int, nhead: int):
@@ -55,12 +56,15 @@ class FeatureIsolatedTransformer(nn.Transformer):
             )
             print(f'self.selected_attn {self.selected_attn}')
         encoder_norm = LayerNorm(f_d_model)
-        return TransformerEncoder(encoder_layer, self.num_encoder_layers, encoder_norm)
+        return TransformerEncoder(encoder_layer, self.num_encoder_layers, norm=encoder_norm)
 
-    def get_custom_decoder(self, nhead):
+    def get_custom_decoder(self, nhead, inner_classifier, patient):
         decoder_layer = DecoderLayer(self.d_model, nhead, self.d_ff)
         decoder_norm = LayerNorm(self.d_model)
-        return TransformerDecoder(decoder_layer, self.num_decoder_layers, decoder_norm)
+        return Decoder(
+            decoder_layer, self.num_decoder_layers, norm=decoder_norm,
+            inner_classifiers=inner_classifier, patient=patient
+        )
 
     def checker(self, full_src, tgt, is_batched):
         if not self.batch_first and full_src.size(1) != tgt.size(1) and is_batched:
@@ -74,7 +78,7 @@ class FeatureIsolatedTransformer(nn.Transformer):
                 memory_mask: Optional[Tensor] = None, src_key_padding_mask: Optional[Tensor] = None,
                 tgt_key_padding_mask: Optional[Tensor] = None, memory_key_padding_mask: Optional[Tensor] = None,
                 src_is_causal: Optional[bool] = None, tgt_is_causal: Optional[bool] = None,
-                memory_is_causal: bool = False) -> Tensor:
+                memory_is_causal: bool = False, training: bool = True) -> Tensor:
 
         full_src = torch.cat(src, dim=-1)
         self.checker(full_src, tgt, full_src.dim() == 3)
@@ -87,7 +91,7 @@ class FeatureIsolatedTransformer(nn.Transformer):
 
         output = self.decoder(tgt, full_memory, tgt_mask=tgt_mask, memory_mask=memory_mask,
                               tgt_key_padding_mask=tgt_key_padding_mask,
-                              memory_key_padding_mask=memory_key_padding_mask)
+                              memory_key_padding_mask=memory_key_padding_mask, training=training)
         return output
 
 
@@ -97,7 +101,7 @@ class SiFormer(nn.Module):
     of skeletal data.
     """
 
-    def __init__(self, num_classes, num_hid=108, attn_type='prob'):
+    def __init__(self, num_classes, num_hid=108, attn_type='prob', num_enc_layers=6, num_dec_layers=6):
         super(SiFormer, self).__init__()
         print(f"The used pytorch version: {torch.__version__}")
         # self.feature_extractor = FeatureExtractor(num_hid=108, kernel_size=7)
@@ -106,10 +110,14 @@ class SiFormer(nn.Module):
         self.body_embedding = nn.Parameter(self.get_encoding_table(d_model=24))
 
         self.class_query = nn.Parameter(torch.rand(1, 1, num_hid))
-        self.transformer = FeatureIsolatedTransformer([42, 42, 24], [3, 3, 2, 9], selected_attn=attn_type)
-        self.linear_class = nn.Linear(num_hid, num_classes)
+        self.transformer = FeatureIsolatedTransformer(
+            [42, 42, 24], [3, 3, 2, 9], num_encoder_layers=num_enc_layers, num_decoder_layers=num_dec_layers,
+            selected_attn=attn_type, inner_classifiers=nn.ModuleList([
+                nn.Linear(num_hid, num_classes) for _ in range(num_dec_layers)
+            ]))
+        self.projection = nn.Linear(num_hid, num_classes)
 
-    def forward(self, l_hand, r_hand, body):
+    def forward(self, l_hand, r_hand, body, training):
         batch_size = l_hand.size(0)
         # (batch_size, seq_len, respected_feature_size, coordinates): (24, 204, 54, 2)
         # -> (batch_size, seq_len, feature_size):  (24, 204, 108)
@@ -130,13 +138,14 @@ class SiFormer(nn.Module):
         body_in = new_body + self.body_embedding  # Shape remains the same
 
         # (seq_len, batch_size, feature_size) -> (batch_size, 1, feature_size): (24, 1, 108)
-        transformer_output = self.transformer([l_hand_in, r_hand_in, body_in],
-                                              self.class_query.repeat(1, batch_size, 1)).transpose(0, 1)
+        transformer_output = self.transformer(
+            [l_hand_in, r_hand_in, body_in], self.class_query.repeat(1, batch_size, 1), training=training
+        ).transpose(0, 1)
         # print("transformer_output.shape")
         # print(transformer_output.shape)
 
         # (batch_size, 1, feature_size) -> (batch_size, num_class): (24, 100)
-        out = self.linear_class(transformer_output).squeeze()
+        out = self.projection(transformer_output).squeeze()
         return out
 
     @staticmethod
