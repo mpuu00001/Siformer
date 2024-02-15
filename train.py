@@ -220,15 +220,13 @@ def train(args):
                 "[" + str(epoch + 1) + "] TRAIN  loss: " + str(train_loss.item() / len(train_loader)) + " acc: " + str(
                     train_acc))
             print(
-                f"[{str(epoch + 1)}] TRAIN time: {str(elapsed_time)} seconds | "
-                f"{str(datetime.timedelta(seconds=elapsed_time))} "
+                f"[{str(epoch + 1)}] TRAIN time: {str(datetime.timedelta(seconds=elapsed_time))} "
             )
             logging.info(
                 "[" + str(epoch + 1) + "] TRAIN  loss: " + str(train_loss.item() / len(train_loader)) + " acc: " + str(
                     train_acc))
             logging.info(
-                f"[{str(epoch + 1)}] TRAIN time: {str(elapsed_time)} seconds | "
-                f"{str(datetime.timedelta(seconds=elapsed_time))} "
+                f"[{str(epoch + 1)}] TRAIN time: {str(datetime.timedelta(seconds=elapsed_time))} "
             )
 
             if val_loader:
