@@ -121,3 +121,21 @@ def rotate_joint(joint, angle_degrees, is_clock_wise=True):
     ]
 
     return rotated_joint
+
+
+def compute_statistics(num_frame_per_sample, num_sample, total_num_rectified_keypoints, total_num_rectified_hands,
+                       rectified_frame, rectified_row):
+    total_num_keypoints = 54 * num_frame_per_sample * num_sample
+    total_num_hands = 2 * num_frame_per_sample * num_sample
+    total_num_frame = num_frame_per_sample * num_sample
+    rectified_keypoints_percentage = (total_num_rectified_keypoints / total_num_keypoints) * 100
+    rectified_hands_percentage = (total_num_rectified_hands / total_num_hands) * 100
+    rectified_frame = (len(rectified_frame) / total_num_frame) * 100
+    rectified_data = (len(rectified_row) / num_sample) * 100
+
+    print(f"rectified_keypoints_percentage = {rectified_keypoints_percentage}%, "
+          f"rectified_hands_percentage = {rectified_hands_percentage}%, rectified_data = {rectified_data}% and "
+          f"rectified_frame = {rectified_frame}%,"
+          f"where total_num_keypoints = {total_num_keypoints}, "
+          f"num_rectified_keypoints = {total_num_rectified_keypoints}")
+
