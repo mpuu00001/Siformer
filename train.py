@@ -20,6 +20,9 @@ from spoter.spoter_model import SPOTER
 from spoter.utils import train_epoch, evaluate, evaluate_top_k
 from spoter.gaussian_noise import GaussianNoise
 
+import time
+import datetime
+
 
 def get_default_args():
     parser = argparse.ArgumentParser(add_help=False)
@@ -178,12 +181,17 @@ def train(args):
         print("Starting " + args.experiment_name + "...\n\n")
         logging.info("Starting " + args.experiment_name + "...\n\n")
 
+    total_training_time = 0
+    time_list = []
     for epoch in range(args.epochs):
-        # start_time
-        train_loss, _, _, train_acc = train_epoch(slrt_model, train_loader, cel_criterion, optimizer, device,
-                                                  scheduler=scheduler)
-        # end_time
-        # end_time - start_time
+        start_time = time.time()
+        train_loss, _, _, train_acc = train_epoch(
+            slrt_model, train_loader, cel_criterion, optimizer, device, scheduler=scheduler)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        time_list.append(elapsed_time)
+        total_training_time += elapsed_time
+
         losses.append(train_loss.item() / len(train_loader))
         train_accs.append(train_acc)
 
@@ -230,6 +238,10 @@ def train(args):
 
         lr_progress.append(optimizer.param_groups[0]["lr"])
 
+    average_time = total_training_time / args.epochs  # Calculate average time per iteration
+
+    print(f"Total time taken over {args.epochs} epochs: {str(datetime.timedelta(seconds=total_training_time))}")
+    print(f"Average time per epochs: {str(datetime.timedelta(seconds=average_time))}")
     # MARK: TESTING
 
     print("\nTesting checkpointed models starting...\n")
@@ -264,14 +276,20 @@ def train(args):
         fig, ax = plt.subplots()
         ax.plot(range(1, len(losses) + 1), losses, c="#D64436", label="Training loss")
         ax.plot(range(1, len(train_accs) + 1), train_accs, c="#00B09B", label="Training accuracy")
-
         if val_loader:
             ax.plot(range(1, len(val_accs) + 1), val_accs, c="#E0A938", label="Validation accuracy")
+        ax.set_ylabel("Accuracy / Loss")
+
+        ax2 = ax.twinx()
+        ax2.plot(range(1, len(time_list) + 1), time_list, c="blue", label="Training Time")
+        ax2.set_ylabel('Seconds')
 
         ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-
-        ax.set(xlabel="Epoch", ylabel="Accuracy / Loss", title="")
-        plt.legend(loc="upper center", bbox_to_anchor=(0.5, 1.05), ncol=4, fancybox=True, shadow=True,
+        ax.set(xlabel="Epoch", title="")
+        lines, labels = ax.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        plt.legend(lines + lines2, labels + labels2, loc="upper center", bbox_to_anchor=(0.5, 1.05), ncol=4,
+                   fancybox=True, shadow=True,
                    fontsize="xx-small")
         ax.grid()
 

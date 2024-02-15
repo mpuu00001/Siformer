@@ -52,15 +52,36 @@ def tensor_to_dictionary(landmarks_tensor: torch.Tensor) -> dict:
     return output
 
 
-def dictionary_to_tensor(landmarks_dict: dict) -> torch.Tensor:
+def dictionary_to_tensor(landmarks_dict: dict, identifier_lst: list) -> torch.Tensor:
 
-    output = np.empty(shape=(len(landmarks_dict["leftEar"]), len(BODY_IDENTIFIERS + HAND_IDENTIFIERS), 2))
+    sequence_len = len(next(iter(landmarks_dict.values()), None))
+    output = np.empty(shape=(sequence_len, len(identifier_lst), 2))
 
-    for landmark_index, identifier in enumerate(BODY_IDENTIFIERS + HAND_IDENTIFIERS):
+    for landmark_index, identifier in enumerate(identifier_lst):
         output[:, landmark_index, 0] = [frame[0] for frame in landmarks_dict[identifier]]
         output[:, landmark_index, 1] = [frame[1] for frame in landmarks_dict[identifier]]
 
     return torch.from_numpy(output)
+
+
+def isolate_single_body_dit(row: dict):
+    body_identifiers = BODY_IDENTIFIERS  # [0:6] on face [6:] on body
+
+    body_dit = {key: row[key] for key in body_identifiers if key in row}
+    # print(f'Keys of the extracted body dit: {list(body_dit.keys())} of length of {len(body_dit.keys())}')
+    return body_dit, body_identifiers
+
+
+def isolate_single_hand(row: dict, hand_index: int):
+    hand_identifiers = []
+    for identifier in HAND_IDENTIFIERS:
+        if identifier[-1] == str(hand_index):
+            hand_identifiers.append(identifier)
+
+    hand_dit = {key: row[key] for key in hand_identifiers if key in row}
+    # which_hand = "left" if hand_index == 0 else "right"
+    # print(f'Keys of the extracted {which_hand} hand dit: {list(hand_dit.keys())} of length of {len(hand_dit.keys())}')
+    return hand_dit, hand_identifiers
 
 
 class CzechSLRDataset(torch_data.Dataset):
@@ -129,15 +150,20 @@ class CzechSLRDataset(torch_data.Dataset):
             depth_map = normalize_single_body_dict(depth_map)
             depth_map = normalize_single_hand_dict(depth_map)
 
-        depth_map = dictionary_to_tensor(depth_map)
+        l_hand_depth_map, l_hand_identifiers = isolate_single_hand(depth_map, 0)
+        r_hand_depth_map, r_hand_identifiers = isolate_single_hand(depth_map, 1)
+        body_depth_map, body_identifiers = isolate_single_body_dit(depth_map)
 
-        # Move the landmark position interval to improve performance
-        depth_map = depth_map - 0.5
+        l_hand_depth_map = dictionary_to_tensor(l_hand_depth_map, l_hand_identifiers) - 0.5
+        r_hand_depth_map = dictionary_to_tensor(r_hand_depth_map, r_hand_identifiers) - 0.5
+        body_depth_map = dictionary_to_tensor(body_depth_map, body_identifiers) - 0.5
 
         if self.transform:
-            depth_map = self.transform(depth_map)
+            l_hand_depth_map = self.transform(l_hand_depth_map)  # (204, 21, 2)
+            r_hand_depth_map = self.transform(r_hand_depth_map)  # (204, 21, 2)
+            body_depth_map = self.transform(body_depth_map)  # (204, 12, 2)
 
-        return depth_map, label
+        return l_hand_depth_map, r_hand_depth_map, body_depth_map, label
 
     def __len__(self):
         return len(self.labels)

@@ -1,16 +1,16 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch import Tensor
-from torch.nn.modules.normalization import LayerNorm
-from torch.nn.modules.transformer import TransformerEncoder, TransformerEncoderLayer
-
 import copy
-from typing import Optional, Union, Callable
-from spoter.attention import AttentionLayer, ProbAttention, FullAttention
-from spoter.utils import get_sequence_list
+import torch
 
-is_dec_layer_checked = False
+import torch.nn as nn
+from typing import Optional, Union, Callable
+from torch import Tensor
+
+import torch.nn.functional as F
+from torch.nn.modules.normalization import LayerNorm
+from torch.nn.modules.transformer import TransformerEncoder, TransformerEncoderLayer, TransformerDecoder
+from spoter.attention import AttentionLayer, ProbAttention, FullAttention
+
+is_dec_checked = False
 is_enc_checked = False
 
 
@@ -19,26 +19,23 @@ def _get_clones(mod, n):
 
 
 class FeatureIsolatedTransformer(nn.Transformer):
-    def __init__(self, d_model_list: list, nhead_list: list, num_enc_layers: int, num_dec_layers: int,
+    def __init__(self, d_model_list: list, nhead_list: list, num_encoder_layers: int = 2, num_decoder_layers: int = 2,
                  dim_feedforward: int = 2048, dropout: float = 0.1,
                  activation: Union[str, Callable[[Tensor], Tensor]] = F.relu,
                  selected_attn: str = 'prob', output_attention: str = True, inner_classifiers: nn.ModuleList = None,
-                 patient=0, use_pyramid_encoder: bool = True, distil: bool = True, enc_layer_list: list = None):
+                 patient=0):
 
-        super(FeatureIsolatedTransformer, self).__init__(sum(d_model_list), nhead_list[-1], num_enc_layers,
-                                                         num_dec_layers, dim_feedforward, dropout, activation)
+        super(FeatureIsolatedTransformer, self).__init__(sum(d_model_list), nhead_list[-1], num_encoder_layers,
+                                                         num_decoder_layers, dim_feedforward, dropout, activation)
         del self.encoder
         self.d_model = sum(d_model_list)
         self.d_ff = dim_feedforward
         self.dropout = dropout
-        self.num_enc_layers = num_enc_layers
-        self.enc_layer_list = enc_layer_list
-        self.num_dec_layers = num_dec_layers
+        self.num_encoder_layers = num_encoder_layers
+        self.num_decoder_layers = num_decoder_layers
         self.activation = activation
         self.selected_attn = selected_attn
         self.output_attention = output_attention
-        self.use_pyramid_encoder = use_pyramid_encoder
-        self.distil = distil
         self.l_hand_encoder = self.get_custom_encoder(d_model_list[0], nhead_list[0])
         self.r_hand_encoder = self.get_custom_encoder(d_model_list[1], nhead_list[1])
         self.body_encoder = self.get_custom_encoder(d_model_list[2], nhead_list[2])
@@ -46,55 +43,31 @@ class FeatureIsolatedTransformer(nn.Transformer):
         self._reset_parameters()
 
     def get_custom_encoder(self, f_d_model: int, nhead: int):
-        Attn = ProbAttention if self.selected_attn == 'prob' else FullAttention
+        encoder_layer = TransformerEncoderLayer(f_d_model, nhead, self.d_ff, self.dropout, self.activation)
         global is_enc_checked
         if not is_enc_checked:
             print(f'self.selected_attn {self.selected_attn}')
-            print(f'self.use_pyramid_encoder {self.use_pyramid_encoder}')
-            print(f'self.distl {self.distil}')
             is_enc_checked = True
 
-        if not self.use_pyramid_encoder:
-            encoder_layer = TransformerEncoderLayer(f_d_model, nhead, self.d_ff, self.dropout, self.activation)
+        if self.selected_attn == 'prob':
             encoder_layer.self_attn = AttentionLayer(
-                Attn(output_attention=self.output_attention),
+                ProbAttention(output_attention=self.output_attention),
                 f_d_model, nhead, mix=False
             )
-            encoder_norm = LayerNorm(f_d_model)
-            encoder = TransformerEncoder(encoder_layer, self.num_enc_layers, encoder_norm)
+
         else:
-            e_layers = get_sequence_list(self.num_enc_layers)
-            inp_lens = list(range(len(e_layers)))
-            encoders = [
-                Encoder(
-                    [
-                        EncoderLayer(
-                            AttentionLayer(
-                                Attn(output_attention=self.output_attention),
-                                f_d_model, nhead, mix=False),
-                            f_d_model,
-                            self.d_ff,
-                            dropout=self.dropout,
-                            activation=self.activation
-                        ) for _ in range(el)
-                    ],
-                    [
-                        ConvLayer(
-                            f_d_model
-                        ) for _ in range(self.num_enc_layers - 1)
-                    ] if self.distil else None,
-                    norm_layer=torch.nn.LayerNorm(f_d_model)
-                ) for el in e_layers]
-
-            encoder = EncoderStack(encoders, inp_lens)
-
-        return encoder
+            encoder_layer.self_attn = AttentionLayer(
+                FullAttention(output_attention=self.output_attention),
+                f_d_model, nhead, mix=False
+            )
+        encoder_norm = LayerNorm(f_d_model)
+        return TransformerEncoder(encoder_layer, self.num_encoder_layers, encoder_norm)
 
     def get_custom_decoder(self, nhead, inner_classifier, patient):
         decoder_layer = DecoderLayer(self.d_model, nhead, self.d_ff)
         decoder_norm = LayerNorm(self.d_model)
-        return Decoder(decoder_layer, self.num_dec_layers, norm=decoder_norm,
-                       patient=patient, inner_classifier=inner_classifier)
+        return Decoder(decoder_layer, self.num_decoder_layers, norm=decoder_norm,
+                       patient=patient, inner_classifier=inner_classifier, )
 
     def checker(self, full_src, tgt, is_batched):
         if not self.batch_first and full_src.size(1) != tgt.size(1) and is_batched:
@@ -124,101 +97,6 @@ class FeatureIsolatedTransformer(nn.Transformer):
         return output
 
 
-class ConvLayer(nn.Module):
-    def __init__(self, c_in):
-        super(ConvLayer, self).__init__()
-        padding = 1 if torch.__version__ >= '1.5.0' else 2
-        self.downConv = nn.Conv1d(in_channels=c_in,
-                                  out_channels=c_in,
-                                  kernel_size=3,
-                                  padding=padding,
-                                  padding_mode='circular')
-        self.norm = nn.BatchNorm1d(c_in)
-        self.activation = nn.ELU()
-        self.maxPool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
-
-    def forward(self, x):
-        # x: [L, B, D/F] -> [B, D/F, L]
-        x = x.permute(1, 2, 0)
-        x = self.downConv(x)
-        x = self.norm(x)
-        x = self.activation(x)
-        x = self.maxPool(x)
-        # x: [B, D/F, L] -> [L//2, B, D/F]
-        x = x.permute(2, 0, 1)
-        # x = x.transpose(1,2)
-        return x
-
-
-class EncoderLayer(nn.Module):
-    def __init__(self, attention, d_model, d_ff=None, dropout=0.1, activation="relu"):
-        super(EncoderLayer, self).__init__()
-        d_ff = d_ff or 4*d_model
-        self.attention = attention
-        self.conv1 = nn.Conv1d(in_channels=d_model, out_channels=d_ff, kernel_size=1)
-        self.conv2 = nn.Conv1d(in_channels=d_ff, out_channels=d_model, kernel_size=1)
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.dropout = nn.Dropout(dropout)
-        self.activation = F.relu if activation == "relu" else F.gelu
-
-    def forward(self, x, attn_mask=None):
-        # x: [L, B, D/F]
-
-        new_x = self.attention(
-            x, x, x,
-            attn_mask=attn_mask
-        )
-        x = x + self.dropout(new_x)
-
-        y = x = self.norm1(x)
-        y = self.dropout(self.activation(self.conv1(y.transpose(-1,1))))
-        y = self.dropout(self.conv2(y).transpose(-1,1))
-
-        return self.norm2(x+y)
-
-
-class Encoder(nn.Module):
-    def __init__(self, enc_layers, conv_layers=None, norm_layer=None):
-        super(Encoder, self).__init__()
-        self.enc_layers = nn.ModuleList(enc_layers)
-        self.conv_layers = nn.ModuleList(conv_layers) if conv_layers is not None else None
-        self.norm = norm_layer
-
-    def forward(self, x, mask=None, src_key_padding_mask=None):
-        # x: [L, B, D/F]
-        if self.conv_layers is not None:
-            for attn_layer, conv_layer in zip(self.enc_layers, self.conv_layers):
-                x = attn_layer(x, attn_mask=mask)
-                x = conv_layer(x)
-            x = self.enc_layers[-1](x, attn_mask=mask)
-        else:
-            for attn_layer in self.enc_layers:
-                x = attn_layer(x, attn_mask=mask)
-
-        if self.norm is not None:
-            x = self.norm(x)
-        # x: [L//2, B, D/F]
-        return x
-
-
-class EncoderStack(nn.Module):
-    def __init__(self, encoders, inp_lens):
-        super(EncoderStack, self).__init__()
-        self.encoders = nn.ModuleList(encoders)
-        self.inp_lens = inp_lens
-
-    def forward(self, x, mask=None, src_key_padding_mask=None):
-        # x: [L, B, F/D] -> [L', B, F/D]
-        x_stack = []
-        for i_len, encoder in zip(self.inp_lens, self.encoders):  # inp_lens: 0, 1, 2
-            inp_len = x.shape[0] // (2 ** i_len)
-            x_s = encoder(x[-inp_len:, :, :])
-            x_stack.append(x_s)
-        x_stack = torch.cat(x_stack, 0)
-        return x_stack
-
-
 class Decoder(nn.TransformerDecoder):
     __constants__ = ['norm']
 
@@ -231,8 +109,9 @@ class Decoder(nn.TransformerDecoder):
                 memory_mask: Optional[Tensor] = None, tgt_key_padding_mask: Optional[Tensor] = None,
                 memory_key_padding_mask: Optional[Tensor] = None, tgt_is_causal: Optional[bool] = None,
                 memory_is_causal: bool = False, training=True) -> Tensor:
-        # tgt: [1, B, F/D]
+
         output = tgt
+
         if training or self.patient == 0:
             for i, mod in enumerate(self.layers):
                 output = mod(output, memory, tgt_mask=tgt_mask,
@@ -291,10 +170,10 @@ class DecoderLayer(nn.TransformerDecoderLayer):
                 memory_mask: Optional[torch.Tensor] = None, tgt_key_padding_mask: Optional[torch.Tensor] = None,
                 memory_key_padding_mask: Optional[torch.Tensor] = None, tgt_is_causal: Optional[bool] = False,
                 memory_is_causal: Optional[bool] = False) -> torch.Tensor:
-        global is_dec_layer_checked
-        if not is_dec_layer_checked:
+        global is_dec_checked
+        if not is_dec_checked:
             print('Using custom DecoderLayer')
-            is_dec_layer_checked = True
+            is_dec_checked = True
 
         tgt = self.norm1(tgt + self.dropout1(tgt))
         tgt2 = self.multihead_attn(tgt, memory, memory, attn_mask=memory_mask,
@@ -322,12 +201,10 @@ class SPOTER(nn.Module):
         self.body_encoding = nn.Parameter(self.get_encoding_table(d_model=24))
 
         self.transformer = FeatureIsolatedTransformer(
-            [42, 42, 24], [3, 3, 2, 9], selected_attn=attn_type, num_enc_layers=num_encoder_layers,
-            num_dec_layers=num_decoder_layers,
-            inner_classifiers=nn.ModuleList([
+            [42, 42, 24], [3, 3, 2, 9], selected_attn=attn_type, num_encoder_layers=num_encoder_layers,
+            num_decoder_layers=num_decoder_layers, inner_classifiers=nn.ModuleList([
                 nn.Linear(num_hid, num_classes) for _ in range(num_decoder_layers)
-            ]),
-            patient=1, use_pyramid_encoder=False, distil=False
+            ]), patient=1
         )
         self.class_query = nn.Parameter(torch.rand(1, 1, num_hid))
         self.projection = nn.Linear(num_hid, num_classes)

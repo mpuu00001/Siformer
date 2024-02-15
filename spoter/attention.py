@@ -1,9 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-
 import numpy as np
-
 from math import sqrt
 
 
@@ -172,6 +169,7 @@ class AttentionLayer(nn.Module):
         self.attention_scores = None
 
     def forward(self, queries, keys, values, attn_mask, key_padding_mask=None, need_weights=False, is_causal=None):
+        # q/k/v: [L, B, D/F] - > [B, L, D/F]
         queries = queries.permute(1, 0, 2).type(dtype=torch.float32)
         keys = keys.permute(1, 0, 2).type(dtype=torch.float32)
         values = values.permute(1, 0, 2).type(dtype=torch.float32)
@@ -197,6 +195,5 @@ class AttentionLayer(nn.Module):
 
         out = self.out_projection(out)
         out = out.permute(1, 0, 2).type(dtype=torch.float32)
-
-        # print(f"out from prob_spare attention: {out.shape}")
+        # [L, B, D/F]
         return out
