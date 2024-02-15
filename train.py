@@ -16,10 +16,12 @@ from pathlib import Path
 
 from utils import __balance_val_split, __split_of_train_sequence, __log_class_statistics
 from datasets.czech_slr_dataset import CzechSLRDataset
-from spoter.spoter_model import SPOTER
-from spoter.utils import train_epoch, evaluate, evaluate_top_k
-from spoter.gaussian_noise import GaussianNoise
+from siformer.model import SiFormer
+from siformer.utils import train_epoch, evaluate, evaluate_top_k
+from siformer.gaussian_noise import GaussianNoise
 
+import time
+import datetime
 
 def get_default_args():
     parser = argparse.ArgumentParser(add_help=False)
@@ -107,11 +109,9 @@ def train(args):
     if torch.cuda.is_available():
         device = torch.device("cuda")
         print("Using cuda")
-    else:
-        print("Will not use cuda")
 
     # Construct the model
-    slrt_model = SPOTER(num_classes=args.num_classes, num_hid=args.num_seq_elements, attn_type=args.attn_type)
+    slrt_model = SiFormer(num_classes=args.num_classes, num_hid=args.num_seq_elements, attn_type=args.attn_type)
     slrt_model.train(True)
     slrt_model.to(device)
 
@@ -180,14 +180,16 @@ def train(args):
         print("Starting " + args.experiment_name + "...\n\n")
         logging.info("Starting " + args.experiment_name + "...\n\n")
 
+    total_training_time = 0
+    time_list = []
     for epoch in range(args.epochs):
-        # start_time
+        start_time = time.time()
         train_loss, _, _, train_acc = train_epoch(slrt_model, train_loader, cel_criterion, optimizer, device,
                                                   scheduler=scheduler)
-        # end_time
-        # end_time - start_time
-        losses.append(train_loss.item() / len(train_loader))
-        train_accs.append(train_acc)
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        time_list.append(elapsed_time)
+        total_training_time += elapsed_time
 
         if val_loader:
             slrt_model.train(False)
@@ -232,8 +234,12 @@ def train(args):
 
         lr_progress.append(optimizer.param_groups[0]["lr"])
 
-    # MARK: TESTING
+    average_time = total_training_time / args.epochs  # Calculate average time per iteration
 
+    print(f"Total time taken over {args.epochs} epochs: {str(datetime.timedelta(seconds=total_training_time))}")
+    print(f"Average time per epochs: {str(datetime.timedelta(seconds=average_time))}")
+
+    # MARK: TESTING
     print("\nTesting checkpointed models starting...\n")
     logging.info("\nTesting checkpointed models starting...\n")
 
@@ -269,11 +275,18 @@ def train(args):
 
         if val_loader:
             ax.plot(range(1, len(val_accs) + 1), val_accs, c="#E0A938", label="Validation accuracy")
+        ax.set_ylabel("Accuracy / Loss")
+
+        ax2 = ax.twinx()
+        ax2.plot(range(1, len(time_list) + 1), time_list, c="blue", label="Training Time")
+        ax2.set_ylabel('Seconds')
 
         ax.xaxis.set_major_locator(ticker.MaxNLocator(integer=True))
-
-        ax.set(xlabel="Epoch", ylabel="Accuracy / Loss", title="")
-        plt.legend(loc="upper center", bbox_to_anchor=(0.5, 1.05), ncol=4, fancybox=True, shadow=True,
+        ax.set(xlabel="Epoch", title="")
+        lines, labels = ax.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        plt.legend(lines + lines2, labels + labels2, loc="upper center", bbox_to_anchor=(0.5, 1.05), ncol=4,
+                   fancybox=True, shadow=True,
                    fontsize="xx-small")
         ax.grid()
 
