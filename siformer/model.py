@@ -50,7 +50,7 @@ class FeatureIsolatedTransformer(nn.Transformer):
         print(f'self.selected_attn {self.selected_attn}')
 
         if not self.use_pyramid_encoder:
-            print("Normal pyramid encoder")
+            print("Apply normal encoder")
             encoder_layer = TransformerEncoderLayer(f_d_model, nhead, self.d_ff, self.dropout, self.activation)
             encoder_layer.self_attn = AttentionLayer(
                 Attn(output_attention=self.output_attention),
@@ -137,7 +137,7 @@ class SiFormer(nn.Module):
     of skeletal data.
     """
 
-    def __init__(self, num_classes, num_hid=108, attn_type='prob', num_enc_layers=2, num_dec_layers=2, patient=1):
+    def __init__(self, num_classes, num_hid=108, attn_type='prob', num_enc_layers=2, num_dec_layers=3, patient=1):
         super(SiFormer, self).__init__()
         print(f"The used pytorch version: {torch.__version__}")
         # self.feature_extractor = FeatureExtractor(num_hid=108, kernel_size=7)

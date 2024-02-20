@@ -11,14 +11,14 @@ def train_epoch(model, dataloader, criterion, optimizer, device, scheduler=None)
     running_loss = 0.0
 
     for i, data in enumerate(dataloader):
-        l_hand, r_hand, body, labels = data
-        l_hand = l_hand.to(device)
-        r_hand = r_hand.to(device)
-        body = body.to(device)
+        l_hands, r_hands, bodies, labels = data
+        l_hands = l_hands.to(device)
+        r_hands = r_hands.to(device)
+        bodies = bodies.to(device)
         labels = labels.to(device, dtype=torch.long)
 
         optimizer.zero_grad()
-        outputs = model(l_hand, r_hand, body, training=True)
+        outputs = model(l_hands, r_hands, bodies, training=True)
 
         loss = criterion(outputs, labels.squeeze(1))
         loss.backward()
@@ -44,24 +44,28 @@ def evaluate(model, dataloader, device, print_stats=False):
 
     with torch.no_grad():
         for i, data in enumerate(dataloader):
-            l_hand, r_hand, body, labels = data
-            l_hand = l_hand.to(device)
-            r_hand = r_hand.to(device)
-            body = body.to(device)
-            labels = labels.to(device, dtype=torch.long)
-
-            outputs = model(l_hand, r_hand, body, training=False)
-
-            # Statistics
-            _, preds = torch.max(outputs, 1)
-            pred_correct += torch.sum(preds == labels.view(-1)).item()
+            l_hands, r_hands, bodies, labels = data
+            l_hands = l_hands.to(device)  # [24, 204, 21, 2]
+            r_hands = r_hands.to(device)  # [24, 204, 21, 2]
+            bodies = bodies.to(device)  # [24, 204, 12, 2]
+            labels = labels.to(device, dtype=torch.long)  # [24, 1]
 
             for j in range(labels.size(0)):
-                stats[int(labels[j][0])][1] += 1
-                if preds[j] == labels[j][0]:
-                    stats[int(labels[j][0])][0] += 1
+                l_hand = l_hands[j].unsqueeze(0)  # [1, 204, 21, 2]
+                r_hand = r_hands[j].unsqueeze(0)  # [1, 204, 21, 2]
+                body = bodies[j].unsqueeze(0)  # [1, 204, 12, 2]
+                label = labels[j]
 
-            pred_all += labels.size(0)
+                output = model(l_hand, r_hand, body, training=False)
+                output = output.unsqueeze(0).expand(1, -1, -1)
+
+                # Statistics
+                if int(torch.argmax(torch.nn.functional.softmax(output, dim=2))) == int(label):
+                    stats[int(labels[0][0])][0] += 1
+                    pred_correct += 1
+
+                stats[int(labels[0][0])][1] += 1
+                pred_all += 1
 
     if print_stats:
         stats = {key: value[0] / value[1] for key, value in stats.items() if value[1] != 0}
@@ -78,20 +82,29 @@ def evaluate_top_k(model, dataloader, device, k=5):
 
     with torch.no_grad():
         for i, data in enumerate(dataloader):
-            l_hand, r_hand, body, labels = data
-            l_hand = l_hand.to(device)
-            r_hand = r_hand.to(device)
-            body = body.to(device)
+            l_hands, r_hands, bodies, labels = data
+            l_hands = l_hands.to(device)
+            r_hands = r_hands.to(device)
+            bodies = bodies.to(device)
             labels = labels.to(device, dtype=torch.long)
 
-            outputs = model(l_hand, r_hand, body, training=False)
+            for j in range(labels.size(0)):
+                l_hand = l_hands[j].unsqueeze(0)  # [1, 204, 21, 2]
+                r_hand = r_hands[j].unsqueeze(0)  # [1, 204, 21, 2]
+                body = bodies[j].unsqueeze(0)  # [1, 204, 12, 2]
+                label = labels[j]
 
-            # Top-k accuracy
-            _, top_k_preds = torch.topk(outputs, k)
-            pred_correct += torch.sum(top_k_preds == labels.view(-1, 1)).item()
-            pred_all += labels.size(0)
+                output = model(l_hand, r_hand, body, training=False)
+                output = output.unsqueeze(0).expand(1, -1, -1)
+
+                # Statistics
+                if int(label[0][0]) in torch.topk(output, k).indices.tolist():
+                    pred_correct += 1
+
+                pred_all += 1
 
     return pred_correct, pred_all, (pred_correct / pred_all)
+
 
 def get_sequence_list(num):
     if num == 0:
