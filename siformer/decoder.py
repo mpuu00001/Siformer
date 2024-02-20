@@ -10,10 +10,12 @@ isChecked = False
 class Decoder(nn.TransformerDecoder):
     __constants__ = ['norm']
 
-    def __init__(self, decoder_layer, num_layers, norm=None, patient=1, inner_classifiers=None):
+    def __init__(self, decoder_layer, num_layers, norm=None, patient=1, inner_classifiers_config=None):
         super(Decoder, self).__init__(decoder_layer, num_layers, norm)
         self.patient = patient
-        self.inner_classifiers = inner_classifiers
+        self.inner_classifiers = nn.ModuleList(
+            [nn.Linear(inner_classifiers_config[0], inner_classifiers_config[1])
+             for _ in range(num_layers)])
 
     def forward(self, tgt: Tensor, memory: Tensor, tgt_mask: Optional[Tensor] = None,
                 memory_mask: Optional[Tensor] = None, tgt_key_padding_mask: Optional[Tensor] = None,
@@ -46,10 +48,14 @@ class Decoder(nn.TransformerDecoder):
                 if self.norm is not None:
                     mod_output = self.norm(mod_output)
                 classifier_out = self.inner_classifiers[i](mod_output).squeeze()
-                labels = classifier_out.detach().argmax(dim=1)
+                # labels = classifier_out.detach().argmax(dim=1)
+                _, labels = torch.max(F.softmax(classifier_out, dim=1), 1)
 
                 if patient_result is not None:
-                    patient_labels = patient_result.detach().argmax(dim=1)
+                    patient_out = patient_result.detach().argmax(dim=1)
+                    _, patient_labels = torch.max(F.softmax(patient_out, dim=1), 1)
+
+                    print(f"patient_labels: {patient_labels}")
                 if (patient_result is not None) and torch.all(labels.eq(patient_labels)):
                     patient_counter += 1
                 else:
@@ -57,7 +63,9 @@ class Decoder(nn.TransformerDecoder):
 
                 patient_result = classifier_out
                 if patient_counter == self.patient:
+                    print("break")
                     break
+            print(f"calculated_dec_layer_num: {calculated_layer_num}")
 
         if self.norm is not None:
             output = self.norm(output)

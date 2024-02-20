@@ -79,7 +79,7 @@ def get_default_args():
                         help="Determines whether the LR should be plotted at the end")
 
     # Training time
-    parser.add_argument("--record_training_time", type=bool, default=True,
+    parser.add_argument("--record_training_time", type=bool, default=False,
                         help="Determines whether continuous statistics of training time should be record")
 
     return parser
