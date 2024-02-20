@@ -137,7 +137,7 @@ class SiFormer(nn.Module):
     of skeletal data.
     """
 
-    def __init__(self, num_classes, num_hid=108, attn_type='prob', num_enc_layers=2, num_dec_layers=6, patient=1):
+    def __init__(self, num_classes, num_hid=108, attn_type='prob', num_enc_layers=2, num_dec_layers=2, patient=1):
         super(SiFormer, self).__init__()
         print(f"The used pytorch version: {torch.__version__}")
         # self.feature_extractor = FeatureExtractor(num_hid=108, kernel_size=7)
