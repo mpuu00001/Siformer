@@ -9,8 +9,8 @@ import torch.nn.functional as F
 from torch.nn.modules.normalization import LayerNorm
 from torch.nn.modules.transformer import TransformerEncoder, TransformerEncoderLayer, TransformerDecoder
 from siformer.attention import AttentionLayer, ProbAttention, FullAttention
-from siformer.decoder import DecoderLayer, Decoder
-from siformer.encoder import Encoder, EncoderLayer, ConvLayer, EncoderStack
+from siformer.decoder import DecoderLayer, PBEEDecoder
+from siformer.encoder import Encoder, EncoderLayer, ConvLayer, EncoderStack, PBEEncoder
 from siformer.utils import get_sequence_list
 
 
@@ -23,8 +23,9 @@ class FeatureIsolatedTransformer(nn.Transformer):
                  dim_feedforward: int = 2048, dropout: float = 0.1,
                  activation: Union[str, Callable[[Tensor], Tensor]] = F.relu,
                  selected_attn: str = 'prob', output_attention: str = True,
-                 inner_classifiers_config: list = None, patient: int = 1, use_pyramid_encoder: bool = False,
-                 distil: bool = False):
+                 inner_classifiers_config: list = None, patience: int = 1, use_pyramid_encoder: bool = False,
+                 distil: bool = False, projections_config: list = None,
+                 PBEE_encoder: bool = False, PBEE_decoder: bool = False):
 
         super(FeatureIsolatedTransformer, self).__init__(sum(d_model_list), nhead_list[-1], num_encoder_layers,
                                                          num_decoder_layers, dim_feedforward, dropout, activation)
@@ -35,6 +36,11 @@ class FeatureIsolatedTransformer(nn.Transformer):
         self.num_encoder_layers = num_encoder_layers
         self.num_decoder_layers = num_decoder_layers
         self.use_pyramid_encoder = use_pyramid_encoder
+        self.use_PBEE_encoder = PBEE_encoder
+        self.use_PBEE_decoder = PBEE_decoder
+        self.inner_classifiers_config = inner_classifiers_config
+        self.projections_config = projections_config
+        self.patience = patience
         self.distil = distil
         self.activation = activation
         self.selected_attn = selected_attn
@@ -42,24 +48,15 @@ class FeatureIsolatedTransformer(nn.Transformer):
         self.l_hand_encoder = self.get_custom_encoder(d_model_list[0], nhead_list[0])
         self.r_hand_encoder = self.get_custom_encoder(d_model_list[1], nhead_list[1])
         self.body_encoder = self.get_custom_encoder(d_model_list[2], nhead_list[2])
-        self.decoder = self.get_custom_decoder(nhead_list[-1], inner_classifiers_config, patient)
+        self.decoder = self.get_custom_decoder(nhead_list[-1])
         self._reset_parameters()
 
     def get_custom_encoder(self, f_d_model: int, nhead: int):
         Attn = ProbAttention if self.selected_attn == 'prob' else FullAttention
         print(f'self.selected_attn {self.selected_attn}')
 
-        if not self.use_pyramid_encoder:
-            print("Apply normal encoder")
-            encoder_layer = TransformerEncoderLayer(f_d_model, nhead, self.d_ff, self.dropout, self.activation)
-            encoder_layer.self_attn = AttentionLayer(
-                Attn(output_attention=self.output_attention),
-                f_d_model, nhead, mix=False
-            )
-            encoder_norm = LayerNorm(f_d_model)
-            encoder = TransformerEncoder(encoder_layer, self.num_encoder_layers, encoder_norm)
-        else:
-            print("Apply pyramid encoder")
+        if self.use_pyramid_encoder:
+            print("Pyramid encoder")
             print(f'self.distl {self.distil}')
             e_layers = get_sequence_list(self.num_encoder_layers)
             inp_lens = list(range(len(e_layers)))
@@ -85,22 +82,42 @@ class FeatureIsolatedTransformer(nn.Transformer):
                 ) for el in e_layers]
 
             encoder = EncoderStack(encoders, inp_lens)
+        else:
+            encoder_layer = TransformerEncoderLayer(f_d_model, nhead, self.d_ff, self.dropout, self.activation)
+            encoder_layer.self_attn = AttentionLayer(
+                Attn(output_attention=self.output_attention),
+                f_d_model, nhead, mix=False
+            )
+            encoder_norm = LayerNorm(f_d_model)
+
+            if self.use_PBEE_encoder:
+                print("Encoder with PBEE")
+                self.inner_classifiers_config[0] = f_d_model
+                encoder = PBEEncoder(
+                    encoder_layer, self.num_encoder_layers, norm=encoder_norm,
+                    inner_classifiers_config=self.inner_classifiers_config,
+                    projections_config=self.projections_config,
+                    patience=self.patience
+                )
+            else:
+                print("Normal encoder")
+                encoder = TransformerEncoder(encoder_layer, self.num_encoder_layers, norm=encoder_norm)
 
         return encoder
 
-    def get_custom_decoder(self, nhead, inner_classifiers_config, patient):
+    def get_custom_decoder(self, nhead):
         decoder_layer = DecoderLayer(self.d_model, nhead, self.d_ff)
         decoder_norm = LayerNorm(self.d_model)
-        if inner_classifiers_config is not None:
-            print("Apply PBEE")
-            return Decoder(
+        if self.use_PBEE_decoder:
+            print("Decoder with PBEE")
+            return PBEEDecoder(
                 decoder_layer, self.num_decoder_layers, norm=decoder_norm,
-                inner_classifiers_config=inner_classifiers_config, patient=patient
+                inner_classifiers_config=self.inner_classifiers_config, patient=self.patience
             )
         else:
-            print("Without PBEE")
+            print("Normal decoder")
             return TransformerDecoder(
-                decoder_layer, self.num_decoder_layers, norm=decoder_norm,)
+                decoder_layer, self.num_decoder_layers, norm=decoder_norm, )
 
     def checker(self, full_src, tgt, is_batched):
         if not self.batch_first and full_src.size(1) != tgt.size(1) and is_batched:
@@ -119,15 +136,15 @@ class FeatureIsolatedTransformer(nn.Transformer):
         full_src = torch.cat(src, dim=-1)
         self.checker(full_src, tgt, full_src.dim() == 3)
         # print(f"attention in shape: {src[0].shape}")
-        l_hand_memory = self.l_hand_encoder(src[0], mask=src_mask, src_key_padding_mask=src_key_padding_mask)
-        r_hand_memory = self.r_hand_encoder(src[1], mask=src_mask, src_key_padding_mask=src_key_padding_mask)
-        body_memory = self.body_encoder(src[2], mask=src_mask, src_key_padding_mask=src_key_padding_mask)
+        l_hand_memory = self.l_hand_encoder(src[0], mask=src_mask, src_key_padding_mask=src_key_padding_mask, training=training)
+        r_hand_memory = self.r_hand_encoder(src[1], mask=src_mask, src_key_padding_mask=src_key_padding_mask, training=training)
+        body_memory = self.body_encoder(src[2], mask=src_mask, src_key_padding_mask=src_key_padding_mask, training=training)
 
         full_memory = torch.cat((l_hand_memory, r_hand_memory, body_memory), -1)
 
         output = self.decoder(tgt, full_memory, tgt_mask=tgt_mask, memory_mask=memory_mask,
                               tgt_key_padding_mask=tgt_key_padding_mask,
-                              memory_key_padding_mask=memory_key_padding_mask, training=training)
+                              memory_key_padding_mask=memory_key_padding_mask)
         return output
 
 
@@ -137,7 +154,8 @@ class SiFormer(nn.Module):
     of skeletal data.
     """
 
-    def __init__(self, num_classes, num_hid=108, attn_type='prob', num_enc_layers=2, num_dec_layers=3, patient=1):
+    def __init__(self, num_classes, num_hid=108, attn_type='prob', num_enc_layers=3, num_dec_layers=2, patience=1,
+                 seq_len=204):
         super(SiFormer, self).__init__()
         print(f"The used pytorch version: {torch.__version__}")
         # self.feature_extractor = FeatureExtractor(num_hid=108, kernel_size=7)
@@ -148,10 +166,11 @@ class SiFormer(nn.Module):
         self.class_query = nn.Parameter(torch.rand(1, 1, num_hid))
         self.transformer = FeatureIsolatedTransformer(
             [42, 42, 24], [3, 3, 2, 9], num_encoder_layers=num_enc_layers, num_decoder_layers=num_dec_layers,
-            selected_attn=attn_type, inner_classifiers_config=[num_hid, num_classes], patient=patient,
-            use_pyramid_encoder=False
+            selected_attn=attn_type, PBEE_encoder=True, inner_classifiers_config=[num_hid, num_classes],
+            projections_config=[seq_len, 1],
+            patience=patience, use_pyramid_encoder=False
         )
-        print(f"num_enc_layers {num_enc_layers}, num_dec_layers {num_dec_layers}, patient {patient}")
+        print(f"num_enc_layers {num_enc_layers}, num_dec_layers {num_dec_layers}, patient {patience}")
         self.projection = nn.Linear(num_hid, num_classes)
 
     def forward(self, l_hand, r_hand, body, training):

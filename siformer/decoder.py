@@ -7,12 +7,12 @@ from typing import Optional, Union, Callable
 isChecked = False
 
 
-class Decoder(nn.TransformerDecoder):
+class PBEEDecoder(nn.TransformerDecoder):
     __constants__ = ['norm']
 
     def __init__(self, decoder_layer, num_layers, norm=None, patient=1, inner_classifiers_config=None):
-        super(Decoder, self).__init__(decoder_layer, num_layers, norm)
-        self.patient = patient
+        super(PBEEDecoder, self).__init__(decoder_layer, num_layers, norm)
+        self.patience = patient
         self.inner_classifiers = nn.ModuleList(
             [nn.Linear(inner_classifiers_config[0], inner_classifiers_config[1])
              for _ in range(num_layers)])
@@ -23,20 +23,22 @@ class Decoder(nn.TransformerDecoder):
                 memory_is_causal: bool = False, training=True) -> Tensor:
 
         output = tgt
-        if training or self.patient == 0:
+
+        if training or self.patience == 0:
             for i, mod in enumerate(self.layers):
                 output = mod(output, memory, tgt_mask=tgt_mask,
                              memory_mask=memory_mask,
                              tgt_key_padding_mask=tgt_key_padding_mask,
                              memory_key_padding_mask=memory_key_padding_mask)
-                mod_output = output
-                if self.norm is not None:
-                    mod_output = self.norm(mod_output)
-                _ = self.inner_classifiers[i](mod_output).squeeze()
+                # mod_output = output
+                # if self.norm is not None:
+                #     mod_output = self.norm(mod_output)
+                # _ = self.inner_classifiers[i](mod_output).squeeze()
         else:
             patient_counter = 0
             patient_result = None
             calculated_layer_num = 0
+            print(calculated_layer_num)
             for i, mod in enumerate(self.layers):
                 calculated_layer_num += 1
                 output = mod(output, memory, tgt_mask=tgt_mask,
@@ -58,13 +60,13 @@ class Decoder(nn.TransformerDecoder):
                     # _, patient_labels = torch.max(F.softmax(patient_out, dim=1), 1)
                     patient_label = int(torch.argmax(torch.nn.functional.softmax(patient_result, dim=2)))
 
-                if (patient_result is not None) and patient_label == label: #torch.all(label.eq(patient_label)):
+                if (patient_result is not None) and (patient_label == label): #torch.all(label.eq(patient_label)):
                     patient_counter += 1
                 else:
                     patient_counter = 0
 
                 patient_result = classifier_out
-                if patient_counter == self.patient:
+                if patient_counter == self.patience:
                     print("break")
                     break
             print(f"calculated_dec_layer_num: {calculated_layer_num}")
