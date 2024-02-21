@@ -176,13 +176,16 @@ def train(args):
 
     if args.experimental_train_split:
         print(
-            "Starting " + args.experiment_name + "_" + str(args.experimental_train_split).replace(".", "") + "...\n\n")
+            "Starting " + args.experiment_name + "_" + str(args.experimental_train_split).replace(".", "") + "...")
         logging.info(
-            "Starting " + args.experiment_name + "_" + str(args.experimental_train_split).replace(".", "") + "...\n\n")
+            "Starting " + args.experiment_name + "_" + str(args.experimental_train_split).replace(".", "") + "...")
 
     else:
-        print("Starting " + args.experiment_name + "...\n\n")
-        logging.info("Starting " + args.experiment_name + "...\n\n")
+        print("Starting " + args.experiment_name + "...")
+        logging.info("Starting " + args.experiment_name + "...")
+
+    print("Training using " + args.training_set_path + "...\n\n")
+    logging.info("Training using " + args.training_set_path + "...\n\n")
 
     total_training_time = 0
     time_list = []
