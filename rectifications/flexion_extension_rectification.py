@@ -196,11 +196,6 @@ if __name__ == "__main__":
     motion_table_path = r"D:\Skeleton_based_SLR\active_motion\flexion_extension_ranges.csv"
     input_path = r"D:\Skeleton_based_SLR\datasets\oversample\balanced_WLASL100_SMOTE.csv"
 
-    # input_path = r"D:\Skeleton_based_SLR\datasets\rectified\rectified_aa_5_balanced_WLASL100_SMOTE.csv"  # rectified_percentage = 12.16%
-    # output_path = r"D:\Skeleton_based_SLR\datasets\rectified\rectified_aafe_5_balanced_WLASL100_SMOTE.csv"
-    rectified_dataset = rectify_finger_flexion_and_extension(input_path, motion_table_path)
-    # rectified_dataset.to_csv(output_path, index=False)
-
     # # alpha = 0.2
     # rectified_dataset = rectify_finger_flexion_and_extension(input_path, motion_table_path, 0.2)
     # output_path_2 = r"D:\Skeleton_based_SLR\datasets\rectified\flexion_and_extension\rectified_fe_02_balanced_WLASL100_SMOTE.csv"
@@ -216,13 +211,13 @@ if __name__ == "__main__":
     # output_path_6 = r"D:\Skeleton_based_SLR\datasets\rectified\flexion_and_extension\rectified_fe_06_balanced_WLASL100_SMOTE.csv"
     # rectified_dataset.to_csv(output_path_6, index=False)
     #
-    # # alpha = 0.8
-    # rectified_dataset = rectify_finger_flexion_and_extension(input_path, motion_table_path, 0.8)
-    # output_path_8 = r"D:\Skeleton_based_SLR\datasets\rectified\flexion_and_extension\rectified_fe_08_balanced_WLASL100_SMOTE.csv"
-    # rectified_dataset.to_csv(output_path_8, index=False)
-    #
-    # # alpha = 1
-    # rectified_dataset = rectify_finger_flexion_and_extension(input_path, motion_table_path, 1)
-    # output_path_1 = r"D:\Skeleton_based_SLR\datasets\rectified\flexion_and_extension\rectified_fe_1_balanced_WLASL100_SMOTE.csv"
-    # rectified_dataset.to_csv(output_path_1, index=False)
+    # alpha = 0.8
+    rectified_dataset = rectify_finger_flexion_and_extension(input_path, motion_table_path, 0.8)
+    output_path_8 = r"D:\Skeleton_based_SLR\datasets\rectified\flexion_and_extension\rectified_fe_08_balanced_WLASL100_SMOTE.csv"
+    rectified_dataset.to_csv(output_path_8, index=False)
+
+    # alpha = 1
+    rectified_dataset = rectify_finger_flexion_and_extension(input_path, motion_table_path, 1)
+    output_path_1 = r"D:\Skeleton_based_SLR\datasets\rectified\flexion_and_extension\rectified_fe_1_balanced_WLASL100_SMOTE.csv"
+    rectified_dataset.to_csv(output_path_1, index=False)
 

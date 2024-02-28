@@ -1,6 +1,7 @@
 import math
 import ast
 import numpy as np
+import random
 
 HAND_IDENTIFIERS = [
     "wrist",
@@ -95,6 +96,20 @@ def get_angle_to_rotate(angle, valid_range):
     return angle_to_rotate
 
 
+def get_angle_to_rotate_to_error(angle, valid_range, error_angle):
+    """
+    angle: the angle to check
+    valid_range: valid_range[0] is the minimum allowable number, valid_range[1] is the maximum allowable number
+    """
+    opt = random.choice([0, 1])
+    if int(opt) == 0:
+        angle_to_rotate = (valid_range[0] - angle) - error_angle
+    else:
+        angle_to_rotate = (valid_range[1] - angle) + error_angle
+
+    return angle_to_rotate
+
+
 def rotate_joint(joint, angle_degrees, is_clock_wise=True):
     """
     Rotate a vector based on the given angle
@@ -128,6 +143,12 @@ def compute_statistics(num_frame_per_sample, num_sample, total_num_rectified_key
     total_num_keypoints = 54 * num_frame_per_sample * num_sample
     total_num_hands = 2 * num_frame_per_sample * num_sample
     total_num_frame = num_frame_per_sample * num_sample
+    # print(f"num_frame_per_sample {num_frame_per_sample}")  # 204
+    # print(f"num_sample {num_sample}")  # 4000
+    # print(f"total_num_keypoints {total_num_keypoints}")  # 44064000
+    # print(f"total_num_hands {total_num_hands}")  # 1632000
+    # print(f"total_num_frame {total_num_frame}")  # 816000
+
     rectified_keypoints_percentage = (total_num_rectified_keypoints / total_num_keypoints) * 100
     rectified_hands_percentage = (total_num_rectified_hands / total_num_hands) * 100
     rectified_frame = (len(rectified_frame) / total_num_frame) * 100
@@ -139,3 +160,26 @@ def compute_statistics(num_frame_per_sample, num_sample, total_num_rectified_key
           f"where total_num_keypoints = {total_num_keypoints}, "
           f"num_rectified_keypoints = {total_num_rectified_keypoints}")
 
+
+def compute_simulation_statistics(num_frame_per_sample, num_sample, total_num_add_error_keypoints,
+                                  total_num_add_error_hands,
+                                  frame_error, row_error):
+    total_num_keypoints = 54 * num_frame_per_sample * num_sample
+    total_num_hands = 2 * num_frame_per_sample * num_sample
+    total_num_frame = num_frame_per_sample * num_sample
+    # print(f"num_frame_per_sample {num_frame_per_sample}")  # 204
+    # print(f"num_sample {num_sample}")  # 4000
+    # print(f"total_num_keypoints {total_num_keypoints}")  # 44064000
+    # print(f"total_num_hands {total_num_hands}")  # 1632000
+    # print(f"total_num_frame {total_num_frame}")  # 816000
+
+    add_error_keypoints_percentage = (total_num_add_error_keypoints / total_num_keypoints) * 100
+    error_hands_percentage = (total_num_add_error_hands / total_num_hands) * 100
+    frame_error = (len(frame_error) / total_num_frame) * 100
+    data_error = (len(row_error) / num_sample) * 100
+
+    print(f"Simulated keypoints error percentage = {add_error_keypoints_percentage}%, "
+          f"Simulated hand error percentage = {error_hands_percentage}%, rectified_data = {data_error}% and "
+          f"Simulated frame error percentage = {frame_error}%,"
+          f"where total_num_keypoints = {total_num_keypoints}, "
+          f"Simulated keypoints error count = {total_num_add_error_keypoints}")
