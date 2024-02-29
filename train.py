@@ -82,6 +82,10 @@ def get_default_args():
     parser.add_argument("--record_training_time", type=bool, default=False,
                         help="Determines whether continuous statistics of training time should be record")
 
+    # Model layers
+    parser.add_argument("--num_enc_layers", type=int, default=3, help="Determines the number of encoder layers")
+    parser.add_argument("--num_dec_layers", type=int, default=2, help="Determines the number of encoder layers")
+
     return parser
 
 
@@ -115,7 +119,8 @@ def train(args):
         print("Using cuda")
 
     # Construct the model
-    slrt_model = SiFormer(num_classes=args.num_classes, num_hid=args.num_seq_elements, attn_type=args.attn_type)
+    slrt_model = SiFormer(num_classes=args.num_classes, num_hid=args.num_seq_elements, attn_type=args.attn_type,
+                          num_enc_layers=args.num_enc_layers, num_dec_layers=args.num_dec_layers)
     slrt_model.train(True)
     slrt_model.to(device)
 
