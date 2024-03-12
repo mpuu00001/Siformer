@@ -87,7 +87,7 @@ def get_default_args():
     # Model settings
     parser.add_argument("--num_enc_layers", type=int, default=3, help="Determines the number of encoder layers")
     parser.add_argument("--num_dec_layers", type=int, default=2, help="Determines the number of decoder layers")
-    parser.add_argument("--PBEE_encoder", type=bool, default=True, help="Determines whether PBEE encoder will be used")
+    parser.add_argument("--PBEE_encoder", type=bool, default=False, help="Determines whether PBEE encoder will be used")
     parser.add_argument("--PBEE_decoder", type=bool, default=False, help="Determines whether PBEE decoder will be used")
     parser.add_argument("--patience", type=int, default=1, help="Determines the patience for earlier exist")
 
