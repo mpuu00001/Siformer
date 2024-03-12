@@ -266,11 +266,11 @@ def train(args):
 
         lr_progress.append(optimizer.param_groups[0]["lr"])
 
-    print(f"Total time taken over {args.epochs} epochs: {str(datetime.timedelta(seconds=total_train_time))}")
-    print(f"Average time per sample: {str(mean(avg_train_time_sec_list[1:]))}")
+    print(f"Total training time taken over {args.epochs} epochs: {str(datetime.timedelta(seconds=total_train_time))}")
+    print(f"Average training time per sample: {str(mean(avg_train_time_sec_list[1:]))}")
 
-    logging.info(f"Total time taken over {args.epochs} epochs: {str(datetime.timedelta(seconds=total_train_time))}")
-    logging.info(f"Average time per sample: {str(mean(avg_train_time_sec_list[1:]))}")
+    logging.info(f"Total training time taken over {args.epochs} epochs: {str(datetime.timedelta(seconds=total_train_time))}")
+    logging.info(f"Average training time per sample: {str(mean(avg_train_time_sec_list[1:]))}")
 
     # MARK: TESTING
     print("\nTesting checkpointed models starting...\n")
