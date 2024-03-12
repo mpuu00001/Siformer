@@ -4,12 +4,14 @@
 import logging
 import torch
 import torch.nn.functional as F
+import time
+from statistics import mean
 
 
 def train_epoch(model, dataloader, criterion, optimizer, device, scheduler=None):
     pred_correct, pred_all = 0, 0
     running_loss = 0.0
-
+    train_time_sec_list = []
     for i, data in enumerate(dataloader):
         l_hands, r_hands, bodies, labels = data
         l_hands = l_hands.to(device)
@@ -18,7 +20,13 @@ def train_epoch(model, dataloader, criterion, optimizer, device, scheduler=None)
         labels = labels.to(device, dtype=torch.long)
 
         optimizer.zero_grad()
+        start_time = time.time()
+
         outputs = model(l_hands, r_hands, bodies, training=True)
+
+        end_time = time.time()
+        train_time_sec = end_time - start_time
+        train_time_sec_list.append(train_time_sec)
 
         loss = criterion(outputs, labels.squeeze(1))
         loss.backward()
@@ -35,7 +43,9 @@ def train_epoch(model, dataloader, criterion, optimizer, device, scheduler=None)
     if scheduler:
         scheduler.step()
 
-    return running_loss, pred_correct, pred_all, (pred_correct / pred_all)
+    avg_train_time = mean(train_time_sec_list)
+
+    return running_loss, pred_correct, pred_all, (pred_correct / pred_all), avg_train_time
 
 
 def evaluate(model, dataloader, device, print_stats=False):

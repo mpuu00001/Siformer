@@ -22,6 +22,8 @@ from siformer.gaussian_noise import GaussianNoise
 
 import time
 import datetime
+from statistics import mean
+
 
 def get_default_args():
     parser = argparse.ArgumentParser(add_help=False)
@@ -132,7 +134,7 @@ def train(args):
     # Construct the other modules
     cel_criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(slrt_model.parameters(), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-8)
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[60, 80], gamma=0.1) #40, 60, 80
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[60, 80], gamma=0.1)  # 40, 60, 80
 
     # Ensure that the path for checkpointing and for images both exist
     Path("out-checkpoints/" + args.experiment_name + "/").mkdir(parents=True, exist_ok=True)
@@ -197,18 +199,18 @@ def train(args):
     print("Training using " + args.training_set_path + "...\n\n")
     logging.info("Training using " + args.training_set_path + "...\n\n")
 
-    total_training_time = 0
-    time_list = []
+    total_train_time = 0
+    avg_train_time_sec_list = []
     for epoch in range(args.epochs):
         start_time = time.time()
-        train_loss, _, _, train_acc = train_epoch(slrt_model, train_loader, cel_criterion, optimizer, device,
-                                                  scheduler=scheduler)
+        train_loss, _, _, train_acc, avg_train_time = train_epoch(slrt_model, train_loader, cel_criterion, optimizer,
+                                                                  device, scheduler=scheduler)
         end_time = time.time()
-        elapsed_time = end_time - start_time
+        train_time = end_time - start_time
 
         if args.record_training_time:
-            time_list.append(elapsed_time)
-            total_training_time += elapsed_time
+            avg_train_time_sec_list.append(avg_train_time)
+            total_train_time += train_time
 
         if val_loader:
             slrt_model.train(False)
@@ -230,19 +232,21 @@ def train(args):
 
                 print(f'Save checkpoint for [ {str(epoch + 1)} ] as ' + "out-checkpoints/" + args.experiment_name
                       + "/checkpoint_v_" + str(checkpoint_index) + ".pth")
+                logging.info(f'Save checkpoint for [ {str(epoch + 1)} ] as ' + "out-checkpoints/" + args.experiment_name
+                             + "/checkpoint_v_" + str(checkpoint_index) + ".pth")
 
         if epoch % args.log_freq == 0:
             print(
                 "[" + str(epoch + 1) + "] TRAIN  loss: " + str(train_loss.item() / len(train_loader)) + " acc: " + str(
                     train_acc))
             print(
-                f"[{str(epoch + 1)}] TRAIN time: {str(datetime.timedelta(seconds=elapsed_time))} "
+                f"[{str(epoch + 1)}] AVG TRAIN time per sample (sec): {str(avg_train_time)} "
             )
             logging.info(
                 "[" + str(epoch + 1) + "] TRAIN  loss: " + str(train_loss.item() / len(train_loader)) + " acc: " + str(
                     train_acc))
             logging.info(
-                f"[{str(epoch + 1)}] TRAIN time: {str(datetime.timedelta(seconds=elapsed_time))} "
+                f"[{str(epoch + 1)}] AVG TRAIN time per sample (sec): {str(avg_train_time)} "
             )
 
             if val_loader:
@@ -262,13 +266,11 @@ def train(args):
 
         lr_progress.append(optimizer.param_groups[0]["lr"])
 
-    average_time = total_training_time / args.epochs  # Calculate average time per iteration
+    print(f"Total time taken over {args.epochs} epochs: {str(datetime.timedelta(seconds=total_train_time))}")
+    print(f"Average time per sample: {str(mean(avg_train_time_sec_list[1:]))}")
 
-    print(f"Total time taken over {args.epochs} epochs: {str(datetime.timedelta(seconds=total_training_time))}")
-    print(f"Average time per epochs: {str(datetime.timedelta(seconds=average_time))}")
-
-    logging.info(f"Total time taken over {args.epochs} epochs: {str(datetime.timedelta(seconds=total_training_time))}")
-    logging.info(f"Average time per epochs: {str(datetime.timedelta(seconds=average_time))}")
+    logging.info(f"Total time taken over {args.epochs} epochs: {str(datetime.timedelta(seconds=total_train_time))}")
+    logging.info(f"Average time per sample: {str(mean(avg_train_time_sec_list[1:]))}")
 
     # MARK: TESTING
     print("\nTesting checkpointed models starting...\n")
@@ -328,7 +330,8 @@ def train(args):
     # PLOT 2: Training time
     if args.record_training_time:
         fig1, ax2 = plt.subplots()
-        ax2.plot(range(1, len(time_list) + 1), time_list, label="Training Time")
+        ax2.plot(range(1, len(avg_train_time_sec_list) + 1), avg_train_time_sec_list,
+                 label="AVG Training Time per sample")
         ax2.set(xlabel="Epoch", ylabel="Second", title="")
         ax2.grid()
 

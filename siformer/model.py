@@ -167,9 +167,9 @@ class SiFormer(nn.Module):
     """
 
     def __init__(self, num_classes, num_hid=108, attn_type='prob', num_enc_layers=3, num_dec_layers=2, patience=1,
-                 seq_len=204, device=None, PBEE_encoder = False, PBEE_decoder = False):
+                 seq_len=204, device=None, PBEE_encoder = True, PBEE_decoder = False):
         super(SiFormer, self).__init__()
-        print(f"The used pytorch version: {torch.__version__}")
+        print(f"Pytorch version: {torch.__version__}")
         # self.feature_extractor = FeatureExtractor(num_hid=108, kernel_size=7)
         self.l_hand_embedding = nn.Parameter(self.get_encoding_table(d_model=42))
         self.r_hand_embedding = nn.Parameter(self.get_encoding_table(d_model=42))
@@ -178,7 +178,7 @@ class SiFormer(nn.Module):
         self.class_query = nn.Parameter(torch.rand(1, 1, num_hid))
         self.transformer = FeatureIsolatedTransformer(
             [42, 42, 24], [3, 3, 2, 9], num_encoder_layers=num_enc_layers, num_decoder_layers=num_dec_layers,
-            selected_attn=attn_type, PBEE_encoder=False, PBEE_decoder=True,
+            selected_attn=attn_type, PBEE_encoder=PBEE_encoder, PBEE_decoder=PBEE_decoder,
             inner_classifiers_config=[num_hid, num_classes], projections_config=[seq_len, 1],  device=device,
             patience=patience, use_pyramid_encoder=False, distil=False
         )
