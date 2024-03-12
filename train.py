@@ -230,9 +230,9 @@ def train(args):
                 torch.save(slrt_model, "out-checkpoints/" + args.experiment_name + "/checkpoint_v_" + str(
                     checkpoint_index) + ".pth")
 
-                print(f'Save checkpoint for [ {str(epoch + 1)} ] as ' + "out-checkpoints/" + args.experiment_name
+                print(f'Save checkpoint for [{str(epoch + 1)}] as ' + "out-checkpoints/" + args.experiment_name
                       + "/checkpoint_v_" + str(checkpoint_index) + ".pth")
-                logging.info(f'Save checkpoint for [ {str(epoch + 1)} ] as ' + "out-checkpoints/" + args.experiment_name
+                logging.info(f'Save checkpoint for [{str(epoch + 1)}] as ' + "out-checkpoints/" + args.experiment_name
                              + "/checkpoint_v_" + str(checkpoint_index) + ".pth")
 
         if epoch % args.log_freq == 0:
