@@ -11,13 +11,40 @@ from normalization.hand_normalization import HAND_IDENTIFIERS
 from normalization.body_normalization import normalize_single_dict as normalize_single_body_dict
 from normalization.hand_normalization import normalize_single_dict as normalize_single_hand_dict
 
+ORI_HAND_IDENTIFIERS = HAND_IDENTIFIERS
 HAND_IDENTIFIERS = [id + "_0" for id in HAND_IDENTIFIERS] + [id + "_1" for id in HAND_IDENTIFIERS]
 
 
-def load_dataset(file_location: str):
+def remove_data(df, num_remove, remove_from):
+    length = len(ast.literal_eval(df["indexDIP_left_X"][0]))
+
+    ori_identifiers, extr_identifier = [], []
+    if remove_from == 'right_hand':
+        ori_identifiers = ORI_HAND_IDENTIFIERS
+        extr_identifier = ["_right_X", "_right_Y"]
+    elif remove_from == 'left_hand':
+        ori_identifiers = ORI_HAND_IDENTIFIERS
+        extr_identifier = ["_left_X", "_left_Y"]
+    elif remove_from == 'body_face':
+        ori_identifiers = BODY_IDENTIFIERS
+        extr_identifier = ["_X", "_Y"]
+
+    for i in range(num_remove):
+        ori_identifier = ori_identifiers[i]
+        identifier_list = [ori_identifier + extr_identifier[0], ori_identifier + extr_identifier[1]]
+        for identifier in identifier_list:
+            df[identifier] = str([0 for _ in range(length)])
+
+    return df
+
+
+def load_dataset(file_location: str, num_remove=0, remove_from=None):
 
     # Load the datset csv file
     df = pd.read_csv(file_location, encoding="utf-8")
+
+    if remove_from is not None:
+        df = remove_data(df, num_remove, remove_from)
 
     # TO BE DELETED
     df.columns = [item.replace("_left_", "_0_").replace("_right_", "_1_") for item in list(df.columns)]
@@ -92,7 +119,7 @@ class CzechSLRDataset(torch_data.Dataset):
     labels: [np.ndarray]
 
     def __init__(self, dataset_filename: str, num_labels=5, transform=None, augmentations=False,
-                 augmentations_prob=0.5, normalize=True):
+                 augmentations_prob=0.5, normalize=True, num_remove=0, remove_from=None):
         """
         Initiates the HPOESDataset with the pre-loaded data from the h5 file.
 
@@ -100,7 +127,7 @@ class CzechSLRDataset(torch_data.Dataset):
         :param transform: Any data transformation to be applied (default: None)
         """
 
-        loaded_data = load_dataset(dataset_filename)
+        loaded_data = load_dataset(file_location=dataset_filename, num_remove=num_remove, remove_from=remove_from)
         data, labels = loaded_data[0], loaded_data[1]
 
         self.data = data
