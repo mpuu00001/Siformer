@@ -6,9 +6,10 @@ from typing import Optional, Union, Callable
 
 
 class ConvLayer(nn.Module):
-    def __init__(self, c_in):
+    def __init__(self, c_in, device=None):
         super(ConvLayer, self).__init__()
         padding = 1 if torch.__version__ >= '1.5.0' else 2
+        self.device = device
         self.downConv = nn.Conv1d(in_channels=c_in,
                                   out_channels=c_in,
                                   kernel_size=3,
@@ -16,7 +17,7 @@ class ConvLayer(nn.Module):
                                   padding_mode='circular')
         self.norm = nn.BatchNorm1d(c_in)
         self.activation = nn.ELU()
-        self.maxPool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
+        self.maxPool = nn.MaxPool1d(kernel_size=52, stride=1, padding=0)  # distil 1/4
 
     def forward(self, x):
         # x: [L, B, D/F] -> [B, D/F, L]
@@ -184,7 +185,7 @@ class EncoderStack(nn.Module):
         self.encoders = nn.ModuleList(encoders)
         self.inp_lens = inp_lens
 
-    def forward(self, x, mask=None, src_key_padding_mask=None):
+    def forward(self, x, mask=None, src_key_padding_mask=None, training=True):
         # x: [L, B, F/D] -> [L', B, F/D]
         x_stack = []
         for i_len, encoder in zip(self.inp_lens, self.encoders):  # inp_lens: 0, 1, 2

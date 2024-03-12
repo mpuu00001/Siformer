@@ -38,7 +38,6 @@ class PBEEDecoder(nn.TransformerDecoder):
             patient_counter = 0
             patient_result = None
             calculated_layer_num = 0
-            print(calculated_layer_num)
             for i, mod in enumerate(self.layers):
                 calculated_layer_num += 1
                 output = mod(output, memory, tgt_mask=tgt_mask,

@@ -25,7 +25,7 @@ class FeatureIsolatedTransformer(nn.Transformer):
                  selected_attn: str = 'prob', output_attention: str = True,
                  inner_classifiers_config: list = None, patience: int = 1, use_pyramid_encoder: bool = False,
                  distil: bool = False, projections_config: list = None,
-                 PBEE_encoder: bool = False, PBEE_decoder: bool = False):
+                 PBEE_encoder: bool = False, PBEE_decoder: bool = False, device=None):
 
         super(FeatureIsolatedTransformer, self).__init__(sum(d_model_list), nhead_list[-1], num_encoder_layers,
                                                          num_decoder_layers, dim_feedforward, dropout, activation)
@@ -35,6 +35,7 @@ class FeatureIsolatedTransformer(nn.Transformer):
         self.dropout = dropout
         self.num_encoder_layers = num_encoder_layers
         self.num_decoder_layers = num_decoder_layers
+        self.device = device
         self.use_pyramid_encoder = use_pyramid_encoder
         self.use_PBEE_encoder = PBEE_encoder
         self.use_PBEE_decoder = PBEE_decoder
@@ -75,7 +76,7 @@ class FeatureIsolatedTransformer(nn.Transformer):
                     ],
                     [
                         ConvLayer(
-                            f_d_model
+                            f_d_model, self.device
                         ) for _ in range(self.num_encoder_layers - 1)
                     ] if self.distil else None,
                     norm_layer=torch.nn.LayerNorm(f_d_model)
@@ -117,7 +118,7 @@ class FeatureIsolatedTransformer(nn.Transformer):
         else:
             print("Normal decoder")
             return TransformerDecoder(
-                decoder_layer, self.num_decoder_layers, norm=decoder_norm, )
+                decoder_layer, self.num_decoder_layers, norm=decoder_norm)
 
     def checker(self, full_src, tgt, is_batched):
         if not self.batch_first and full_src.size(1) != tgt.size(1) and is_batched:
@@ -135,16 +136,27 @@ class FeatureIsolatedTransformer(nn.Transformer):
 
         full_src = torch.cat(src, dim=-1)
         self.checker(full_src, tgt, full_src.dim() == 3)
-        # print(f"attention in shape: {src[0].shape}")
-        l_hand_memory = self.l_hand_encoder(src[0], mask=src_mask, src_key_padding_mask=src_key_padding_mask, training=training)
-        r_hand_memory = self.r_hand_encoder(src[1], mask=src_mask, src_key_padding_mask=src_key_padding_mask, training=training)
-        body_memory = self.body_encoder(src[2], mask=src_mask, src_key_padding_mask=src_key_padding_mask, training=training)
+
+        if self.use_PBEE_encoder:
+            l_hand_memory = self.l_hand_encoder(src[0], mask=src_mask, src_key_padding_mask=src_key_padding_mask, training=training)
+            r_hand_memory = self.r_hand_encoder(src[1], mask=src_mask, src_key_padding_mask=src_key_padding_mask, training=training)
+            body_memory = self.body_encoder(src[2], mask=src_mask, src_key_padding_mask=src_key_padding_mask, training=training)
+        else:
+            l_hand_memory = self.l_hand_encoder(src[0], mask=src_mask, src_key_padding_mask=src_key_padding_mask)
+            r_hand_memory = self.r_hand_encoder(src[1], mask=src_mask, src_key_padding_mask=src_key_padding_mask)
+            body_memory = self.body_encoder(src[2], mask=src_mask, src_key_padding_mask=src_key_padding_mask)
 
         full_memory = torch.cat((l_hand_memory, r_hand_memory, body_memory), -1)
 
-        output = self.decoder(tgt, full_memory, tgt_mask=tgt_mask, memory_mask=memory_mask,
-                              tgt_key_padding_mask=tgt_key_padding_mask,
-                              memory_key_padding_mask=memory_key_padding_mask)
+        if self.use_PBEE_decoder:
+            output = self.decoder(tgt, full_memory, tgt_mask=tgt_mask, memory_mask=memory_mask,
+                                  tgt_key_padding_mask=tgt_key_padding_mask,
+                                  memory_key_padding_mask=memory_key_padding_mask, training=training)
+        else:
+            output = self.decoder(tgt, full_memory, tgt_mask=tgt_mask, memory_mask=memory_mask,
+                                  tgt_key_padding_mask=tgt_key_padding_mask,
+                                  memory_key_padding_mask=memory_key_padding_mask)
+
         return output
 
 
@@ -155,7 +167,7 @@ class SiFormer(nn.Module):
     """
 
     def __init__(self, num_classes, num_hid=108, attn_type='prob', num_enc_layers=3, num_dec_layers=2, patience=1,
-                 seq_len=204):
+                 seq_len=204, device=None, PBEE_encoder = False, PBEE_decoder = False):
         super(SiFormer, self).__init__()
         print(f"The used pytorch version: {torch.__version__}")
         # self.feature_extractor = FeatureExtractor(num_hid=108, kernel_size=7)
@@ -166,9 +178,9 @@ class SiFormer(nn.Module):
         self.class_query = nn.Parameter(torch.rand(1, 1, num_hid))
         self.transformer = FeatureIsolatedTransformer(
             [42, 42, 24], [3, 3, 2, 9], num_encoder_layers=num_enc_layers, num_decoder_layers=num_dec_layers,
-            selected_attn=attn_type, PBEE_encoder=True, inner_classifiers_config=[num_hid, num_classes],
-            projections_config=[seq_len, 1],
-            patience=patience, use_pyramid_encoder=False
+            selected_attn=attn_type, PBEE_encoder=False, PBEE_decoder=True,
+            inner_classifiers_config=[num_hid, num_classes], projections_config=[seq_len, 1],  device=device,
+            patience=patience, use_pyramid_encoder=False, distil=False
         )
         print(f"num_enc_layers {num_enc_layers}, num_dec_layers {num_dec_layers}, patient {patience}")
         self.projection = nn.Linear(num_hid, num_classes)

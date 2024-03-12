@@ -82,9 +82,12 @@ def get_default_args():
     parser.add_argument("--record_training_time", type=bool, default=False,
                         help="Determines whether continuous statistics of training time should be record")
 
-    # Model layers
+    # Model settings
     parser.add_argument("--num_enc_layers", type=int, default=3, help="Determines the number of encoder layers")
-    parser.add_argument("--num_dec_layers", type=int, default=2, help="Determines the number of encoder layers")
+    parser.add_argument("--num_dec_layers", type=int, default=2, help="Determines the number of decoder layers")
+    parser.add_argument("--PBEE_encoder", type=bool, default=True, help="Determines whether PBEE encoder will be used")
+    parser.add_argument("--PBEE_decoder", type=bool, default=False, help="Determines whether PBEE decoder will be used")
+    parser.add_argument("--patience", type=int, default=1, help="Determines the patience for earlier exist")
 
     return parser
 
@@ -120,7 +123,9 @@ def train(args):
 
     # Construct the model
     slrt_model = SiFormer(num_classes=args.num_classes, num_hid=args.num_seq_elements, attn_type=args.attn_type,
-                          num_enc_layers=args.num_enc_layers, num_dec_layers=args.num_dec_layers)
+                          num_enc_layers=args.num_enc_layers, num_dec_layers=args.num_dec_layers, device=device,
+                          PBEE_encoder=args.PBEE_encoder, PBEE_decoder=args.PBEE_decoder,
+                          patience=args.patience)
     slrt_model.train(True)
     slrt_model.to(device)
 
@@ -223,6 +228,9 @@ def train(args):
                 torch.save(slrt_model, "out-checkpoints/" + args.experiment_name + "/checkpoint_v_" + str(
                     checkpoint_index) + ".pth")
 
+                print(f'Save checkpoint for [ {str(epoch + 1)} ] as ' + "out-checkpoints/" + args.experiment_name
+                      + "/checkpoint_v_" + str(checkpoint_index) + ".pth")
+
         if epoch % args.log_freq == 0:
             print(
                 "[" + str(epoch + 1) + "] TRAIN  loss: " + str(train_loss.item() / len(train_loader)) + " acc: " + str(
@@ -258,6 +266,9 @@ def train(args):
 
     print(f"Total time taken over {args.epochs} epochs: {str(datetime.timedelta(seconds=total_training_time))}")
     print(f"Average time per epochs: {str(datetime.timedelta(seconds=average_time))}")
+
+    logging.info(f"Total time taken over {args.epochs} epochs: {str(datetime.timedelta(seconds=total_training_time))}")
+    logging.info(f"Average time per epochs: {str(datetime.timedelta(seconds=average_time))}")
 
     # MARK: TESTING
     print("\nTesting checkpointed models starting...\n")
