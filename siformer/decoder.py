@@ -66,9 +66,9 @@ class PBEEDecoder(nn.TransformerDecoder):
 
                 patient_result = classifier_out
                 if patient_counter == self.patience:
-                    print("break")
+                    # print("break")
                     break
-            print(f"calculated_dec_layer_num: {calculated_layer_num}")
+            # print(f"calculated_dec_layer_num: {calculated_layer_num}")
 
         if self.norm is not None:
             output = self.norm(output)

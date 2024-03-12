@@ -168,7 +168,7 @@ class PBEEncoder(nn.TransformerEncoder):
                 if patient_counter == self.patience:
                     # print("break")
                     break
-            # print(f"calculated_dec_layer_num: {calculated_layer_num}")
+            # print(f"calculated_enc_layer_num: {calculated_layer_num}")
 
         if convert_to_nested:
             output = output.to_padded_tensor(0.)
