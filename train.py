@@ -16,7 +16,7 @@ from pathlib import Path
 
 from utils import __balance_val_split, __split_of_train_sequence, __log_class_statistics
 from datasets.czech_slr_dataset import CzechSLRDataset
-from siformer.model import SiFormer
+from siformer.model import SiFormer, SpoTer
 from siformer.utils import train_epoch, evaluate, evaluate_top_k
 from siformer.gaussian_noise import GaussianNoise
 
@@ -37,8 +37,7 @@ def get_default_args():
                         help="Hidden dimension of the underlying Transformer model")
     parser.add_argument("--seed", type=int, default=379,
                         help="Seed with which to initialize all the random components of the training")
-    parser.add_argument("--attn_type", type=str, default='prob',
-                        help="The attention mechanism used by the model")
+
     # Data
     parser.add_argument("--training_set_path", type=str, default="", help="Path to the training dataset CSV file")
     parser.add_argument("--testing_set_path", type=str, default="", help="Path to the testing dataset CSV file")
@@ -85,8 +84,10 @@ def get_default_args():
                         help="Determines whether continuous statistics of training time should be record")
 
     # Model settings
+    parser.add_argument("--attn_type", type=str, default='prob', help="The attention mechanism used by the model")
     parser.add_argument("--num_enc_layers", type=int, default=3, help="Determines the number of encoder layers")
     parser.add_argument("--num_dec_layers", type=int, default=2, help="Determines the number of decoder layers")
+    parser.add_argument("--FITR", type=bool, default=False, help="Determines the patience for earlier exist")
     parser.add_argument("--PBEE_encoder", type=bool, default=False, help="Determines whether PBEE encoder will be used")
     parser.add_argument("--PBEE_decoder", type=bool, default=False, help="Determines whether PBEE decoder will be used")
     parser.add_argument("--patience", type=int, default=1, help="Determines the patience for earlier exist")
@@ -122,18 +123,25 @@ def train(args):
     if torch.cuda.is_available():
         device = torch.device("cuda")
         print("Using cuda")
+    print(f"Pytorch version: {torch.__version__}")
 
     # Construct the model
-    slrt_model = SiFormer(num_classes=args.num_classes, num_hid=args.num_seq_elements, attn_type=args.attn_type,
-                          num_enc_layers=args.num_enc_layers, num_dec_layers=args.num_dec_layers, device=device,
-                          PBEE_encoder=args.PBEE_encoder, PBEE_decoder=args.PBEE_decoder,
-                          patience=args.patience)
-    slrt_model.train(True)
-    slrt_model.to(device)
+    if args.FITR:
+        slr_model = SiFormer(num_classes=args.num_classes, num_hid=args.num_seq_elements, attn_type=args.attn_type,
+                              num_enc_layers=args.num_enc_layers, num_dec_layers=args.num_dec_layers, device=device,
+                              PBEE_encoder=args.PBEE_encoder, PBEE_decoder=args.PBEE_decoder,
+                              patience=args.patience)
+    else:
+        slr_model = SpoTer(num_classes=args.num_classes, num_hid=args.num_seq_elements,
+                           num_enc_layers=args.num_enc_layers, num_dec_layers=args.num_dec_layers,
+                           PBEE_encoder=args.PBEE_encoder, PBEE_decoder=args.PBEE_decoder,
+                           patience=args.patience)
+    slr_model.train(True)
+    slr_model.to(device)
 
     # Construct the other modules
     cel_criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.AdamW(slrt_model.parameters(), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-8)
+    optimizer = torch.optim.AdamW(slr_model.parameters(), lr=args.lr, betas=(0.9, 0.999), weight_decay=1e-8)
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[60, 80], gamma=0.1)  # 40, 60, 80
 
     # Ensure that the path for checkpointing and for images both exist
@@ -191,19 +199,22 @@ def train(args):
             "Starting " + args.experiment_name + "_" + str(args.experimental_train_split).replace(".", "") + "...")
         logging.info(
             "Starting " + args.experiment_name + "_" + str(args.experimental_train_split).replace(".", "") + "...")
-
     else:
         print("Starting " + args.experiment_name + "...")
         logging.info("Starting " + args.experiment_name + "...")
 
-    print("Training using " + args.training_set_path + "...\n\n")
-    logging.info("Training using " + args.training_set_path + "...\n\n")
+    print("Training using " + args.training_set_path + "...")
+    logging.info("Training using " + args.training_set_path + "...")
+
+    if args.validation_set == "from-file":
+        print("Validation using " + args.validation_set_path + "...\n\n")
+        logging.info("Validation using " + args.validation_set_path + "...\n\n")
 
     total_train_time = 0
     avg_train_time_sec_list = []
     for epoch in range(args.epochs):
         start_time = time.time()
-        train_loss, _, _, train_acc, avg_train_time = train_epoch(slrt_model, train_loader, cel_criterion, optimizer,
+        train_loss, _, _, train_acc, avg_train_time = train_epoch(slr_model, train_loader, cel_criterion, optimizer,
                                                                   device, scheduler=scheduler)
         end_time = time.time()
         train_time = end_time - start_time
@@ -213,21 +224,21 @@ def train(args):
             total_train_time += train_time
 
         if val_loader:
-            slrt_model.train(False)
-            _, _, val_acc = evaluate(slrt_model, val_loader, device)
-            slrt_model.train(True)
+            slr_model.train(False)
+            _, _, val_acc = evaluate(slr_model, val_loader, device)
+            slr_model.train(True)
             val_accs.append(val_acc)
 
         # Save checkpoints if they are best in the current subset
         if args.save_checkpoints:
             if train_acc > top_train_acc:
                 top_train_acc = train_acc
-                torch.save(slrt_model, "out-checkpoints/" + args.experiment_name + "/checkpoint_t_" + str(
+                torch.save(slr_model, "out-checkpoints/" + args.experiment_name + "/checkpoint_t_" + str(
                     checkpoint_index) + ".pth")
 
             if val_acc > top_val_acc:
                 top_val_acc = val_acc
-                torch.save(slrt_model, "out-checkpoints/" + args.experiment_name + "/checkpoint_v_" + str(
+                torch.save(slr_model, "out-checkpoints/" + args.experiment_name + "/checkpoint_v_" + str(
                     checkpoint_index) + ".pth")
 
                 print(f'Save checkpoint for [{str(epoch + 1)}] as ' + "out-checkpoints/" + args.experiment_name
@@ -266,11 +277,12 @@ def train(args):
 
         lr_progress.append(optimizer.param_groups[0]["lr"])
 
-    print(f"Total training time taken over {args.epochs} epochs: {str(datetime.timedelta(seconds=total_train_time))}")
-    print(f"Average training time per sample: {str(mean(avg_train_time_sec_list[1:]))}")
+    if args.record_training_time:
+        print(f"Total training time taken over {args.epochs} epochs: {str(datetime.timedelta(seconds=total_train_time))}")
+        print(f"Average training time per sample: {str(mean(avg_train_time_sec_list[1:]))}")
 
-    logging.info(f"Total training time taken over {args.epochs} epochs: {str(datetime.timedelta(seconds=total_train_time))}")
-    logging.info(f"Average training time per sample: {str(mean(avg_train_time_sec_list[1:]))}")
+        logging.info(f"Total training time taken over {args.epochs} epochs: {str(datetime.timedelta(seconds=total_train_time))}")
+        logging.info(f"Average training time per sample: {str(mean(avg_train_time_sec_list[1:]))}")
 
     # MARK: TESTING
     print("\nTesting checkpointed models starting...\n")
@@ -286,7 +298,7 @@ def train(args):
                     "out-checkpoints/" + args.experiment_name + "/checkpoint_" + checkpoint_id + "_" + str(i) + ".pth")
                 tested_model.train(False)
                 _, _, eval_acc = evaluate(tested_model, eval_loader, device, print_stats=True)
-                _, _, top_val_acc = evaluate_top_k(slrt_model, val_loader, device)
+                _, _, top_val_acc = evaluate_top_k(slr_model, val_loader, device)
 
                 if eval_acc > top_result:
                     top_result = eval_acc
