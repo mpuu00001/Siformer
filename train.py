@@ -133,9 +133,7 @@ def train(args):
                               patience=args.patience)
     else:
         slr_model = SpoTer(num_classes=args.num_classes, num_hid=args.num_seq_elements,
-                           num_enc_layers=args.num_enc_layers, num_dec_layers=args.num_dec_layers,
-                           PBEE_encoder=args.PBEE_encoder, PBEE_decoder=args.PBEE_decoder,
-                           patience=args.patience)
+                           num_enc_layers=args.num_enc_layers, num_dec_layers=args.num_dec_layers)
     slr_model.train(True)
     slr_model.to(device)
 
