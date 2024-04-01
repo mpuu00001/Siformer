@@ -186,5 +186,5 @@ def rectify_finger_flexion_and_extension(dataset_path, fe_active_motion_table_pa
     num_frame_per_sample = len(dataset.at[1, 'leftEar_X'])
     compute_statistics(num_frame_per_sample, len(dataset), total_num_rectified_keypoints, total_num_rectified_hands,
                        rectified_frame, rectified_row)
-    return dataset
 
+    return dataset

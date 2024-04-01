@@ -37,7 +37,6 @@ def convert_data_to_python_rep(dataset, ignore_col_list=None):
     for row_index in range(len(dataset)):
         for column in dataset.columns:
             if column not in ignore_col_list:
-                # print(column)
                 data = ast.literal_eval(dataset.at[row_index, column])
                 dataset.at[row_index, column] = data
     return dataset
@@ -172,6 +171,7 @@ def compute_simulation_statistics(num_frame_per_sample, num_sample, total_num_ad
     # print(f"total_num_keypoints {total_num_keypoints}")  # 44064000
     # print(f"total_num_hands {total_num_hands}")  # 1632000
     # print(f"total_num_frame {total_num_frame}")  # 816000
+    # 1361323 missing hands
 
     add_error_keypoints_percentage = (total_num_add_error_keypoints / total_num_keypoints) * 100
     error_hands_percentage = (total_num_add_error_hands / total_num_hands) * 100
@@ -179,7 +179,8 @@ def compute_simulation_statistics(num_frame_per_sample, num_sample, total_num_ad
     data_error = (len(row_error) / num_sample) * 100
 
     print(f"Simulated keypoints error percentage = {add_error_keypoints_percentage}%, "
-          f"Simulated hand error percentage = {error_hands_percentage}%, rectified_data = {data_error}% and "
+          f"Simulated hand error percentage = {error_hands_percentage}%, "
+          f"Simulated data error percentage = {data_error}% and "
           f"Simulated frame error percentage = {frame_error}%,"
           f"where total_num_keypoints = {total_num_keypoints}, "
           f"Simulated keypoints error count = {total_num_add_error_keypoints}")

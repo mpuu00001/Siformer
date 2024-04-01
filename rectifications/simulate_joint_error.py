@@ -179,7 +179,7 @@ def simulate_other_flexion_and_extension_error(hand_pose, flexion_extension_rang
 
 
 def simulate_joint_error(dataset_path, aa_active_motion_table_path, fe_active_motion_table_path, add_error_per=0.5,
-                         fake_error_angle=20, add_num_error_hand=None):
+                         fake_error_angle=90, add_num_error_hand=None):
     dataset_ori = pd.read_csv(dataset_path)
     dataset = convert_data_to_python_rep(dataset_ori, IGNORE_COL_LIST)
 
@@ -271,7 +271,44 @@ def simulate_joint_error(dataset_path, aa_active_motion_table_path, fe_active_mo
     compute_simulation_statistics(num_frame_per_sample, num_sample, total_num_add_keypoints_error,
                                   total_num_add_hands_error,
                                   frame_error, row_error)
+    # rectified_keypoints_percentage = 2.8152732389252%, rectified_hands_percentage = 16.184191176470588%,
+    # rectified_data = 97.52499999999999% and rectified_frame = 21.89142156862745%,
+    # where total_num_keypoints = 44064000, num_rectified_keypoints = 1240522
     return dataset
 
 
+if __name__ == "__main__":
+    fe_motion_table_path = r"D:\Skeleton_based_SLR\active_motion\flexion_extension_ranges.csv"
+    aa_motion_table_path = r"D:\Skeleton_based_SLR\active_motion\abduction_adduction_ranges.csv"
+    # input_path = r"D:\Skeleton_based_SLR\datasets\oversample\balanced_WLASL100_SMOTE.csv"
+    input_path = r"D:\Skeleton_based_SLR\datasets\rectified\combination\rectified_aafe_1_balanced_WLASL100_SMOTE.csv"
 
+    error_dataset = simulate_joint_error(input_path, aa_motion_table_path, fe_motion_table_path,
+                                         add_num_error_hand=81600)
+    output_path = r"D:\Skeleton_based_SLR\datasets\JES\JES_1_balanced_WLASL100_SMOTE.csv"
+    error_dataset.to_csv(output_path, index=False)
+    print("saved at: " + output_path)
+
+    error_dataset = simulate_joint_error(input_path, aa_motion_table_path, fe_motion_table_path,
+                                         add_num_error_hand=163200)
+    output_path = r"D:\Skeleton_based_SLR\datasets\JES\JES_2_balanced_WLASL100_SMOTE.csv"
+    error_dataset.to_csv(output_path, index=False)
+    print("saved at: " + output_path)
+
+    error_dataset = simulate_joint_error(input_path, aa_motion_table_path, fe_motion_table_path,
+                                         add_num_error_hand=244800)
+    output_path = r"D:\Skeleton_based_SLR\datasets\JES\JES_3_balanced_WLASL100_SMOTE.csv"
+    error_dataset.to_csv(output_path, index=False)
+    print("saved at: " + output_path)
+
+    error_dataset = simulate_joint_error(input_path, aa_motion_table_path, fe_motion_table_path,
+                                         add_num_error_hand=326400)
+    output_path = r"D:\Skeleton_based_SLR\datasets\JES\JES_4_balanced_WLASL100_SMOTE.csv"
+    error_dataset.to_csv(output_path, index=False)
+    print("saved at: " + output_path)
+
+    error_dataset = simulate_joint_error(input_path, aa_motion_table_path, fe_motion_table_path,
+                                         add_num_error_hand=408000)
+    output_path = r"D:\Skeleton_based_SLR\datasets\JES\JES_4_balanced_WLASL100_SMOTE.csv"
+    error_dataset.to_csv(output_path, index=False)
+    print("saved at: " + output_path)
