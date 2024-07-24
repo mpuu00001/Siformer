@@ -1,3 +1,5 @@
+import uuid
+
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
@@ -23,6 +25,7 @@ class PBEEDecoder(nn.TransformerDecoder):
                 memory_is_causal: bool = False, training=True) -> Tensor:
 
         output = tgt
+        id = uuid.uuid1()
 
         if training or self.patience == 0:
             for i, mod in enumerate(self.layers):
@@ -68,7 +71,6 @@ class PBEEDecoder(nn.TransformerDecoder):
                 if patient_counter == self.patience:
                     # print("break")
                     break
-            # print(f"calculated_dec_layer_num: {calculated_layer_num}")
 
         if self.norm is not None:
             output = self.norm(output)
@@ -86,6 +88,7 @@ class DecoderLayer(nn.TransformerDecoderLayer):
                  activation: Union[str, Callable[[Tensor], Tensor]] = F.relu):
         super(DecoderLayer, self).__init__(d_model, nhead, dim_feedforward, dropout, activation)
         # Change self.multihead_attn to use Pro-sparse attention
+        print('Using custom DecoderLayer')
 
     def forward(self, tgt: torch.Tensor, memory: torch.Tensor, tgt_mask: Optional[torch.Tensor] = None,
                 memory_mask: Optional[torch.Tensor] = None, tgt_key_padding_mask: Optional[torch.Tensor] = None,
@@ -93,7 +96,6 @@ class DecoderLayer(nn.TransformerDecoderLayer):
                 memory_is_causal: Optional[bool] = False) -> torch.Tensor:
         global isChecked
         if not isChecked:
-            print('Using custom DecoderLayer')
             isChecked = True
 
         tgt = tgt + self.dropout1(tgt)

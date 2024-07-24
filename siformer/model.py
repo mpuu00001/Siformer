@@ -13,6 +13,8 @@ from siformer.decoder import DecoderLayer, PBEEDecoder
 from siformer.encoder import Encoder, EncoderLayer, ConvLayer, EncoderStack, PBEEncoder
 from siformer.utils import get_sequence_list
 
+import uuid
+
 
 def _get_clones(mod, n):
     return nn.ModuleList([copy.deepcopy(mod) for _ in range(n)])
@@ -25,7 +27,7 @@ class FeatureIsolatedTransformer(nn.Transformer):
                  selected_attn: str = 'prob', output_attention: str = True,
                  inner_classifiers_config: list = None, patience: int = 1, use_pyramid_encoder: bool = False,
                  distil: bool = False, projections_config: list = None,
-                 PBEE_encoder: bool = False, PBEE_decoder: bool = False, device=None):
+                 IA_encoder: bool = False, IA_decoder: bool = False, device=None):
 
         super(FeatureIsolatedTransformer, self).__init__(sum(d_model_list), nhead_list[-1], num_encoder_layers,
                                                          num_decoder_layers, dim_feedforward, dropout, activation)
@@ -37,8 +39,8 @@ class FeatureIsolatedTransformer(nn.Transformer):
         self.num_decoder_layers = num_decoder_layers
         self.device = device
         self.use_pyramid_encoder = use_pyramid_encoder
-        self.use_PBEE_encoder = PBEE_encoder
-        self.use_PBEE_decoder = PBEE_decoder
+        self.use_IA_encoder = IA_encoder
+        self.use_IA_decoder = IA_decoder
         self.inner_classifiers_config = inner_classifiers_config
         self.projections_config = projections_config
         self.patience = patience
@@ -91,8 +93,8 @@ class FeatureIsolatedTransformer(nn.Transformer):
             )
             encoder_norm = LayerNorm(f_d_model)
 
-            if self.use_PBEE_encoder:
-                print("Encoder with PBEE")
+            if self.use_IA_encoder:
+                print("Encoder with input adaptive")
                 self.inner_classifiers_config[0] = f_d_model
                 encoder = PBEEncoder(
                     encoder_layer, self.num_encoder_layers, norm=encoder_norm,
@@ -109,8 +111,8 @@ class FeatureIsolatedTransformer(nn.Transformer):
     def get_custom_decoder(self, nhead):
         decoder_layer = DecoderLayer(self.d_model, nhead, self.d_ff)
         decoder_norm = LayerNorm(self.d_model)
-        if self.use_PBEE_decoder:
-            print("Decoder with PBEE")
+        if self.use_IA_decoder:
+            print("Decoder with with input adaptive")
             return PBEEDecoder(
                 decoder_layer, self.num_decoder_layers, norm=decoder_norm,
                 inner_classifiers_config=self.inner_classifiers_config, patient=self.patience
@@ -137,7 +139,9 @@ class FeatureIsolatedTransformer(nn.Transformer):
         full_src = torch.cat(src, dim=-1)
         self.checker(full_src, tgt, full_src.dim() == 3)
 
-        if self.use_PBEE_encoder:
+        id = uuid.uuid1()
+        # code for concurrency is removed...
+        if self.use_IA_encoder:
             l_hand_memory = self.l_hand_encoder(src[0], mask=src_mask, src_key_padding_mask=src_key_padding_mask, training=training)
             r_hand_memory = self.r_hand_encoder(src[1], mask=src_mask, src_key_padding_mask=src_key_padding_mask, training=training)
             body_memory = self.body_encoder(src[2], mask=src_mask, src_key_padding_mask=src_key_padding_mask, training=training)
@@ -148,7 +152,7 @@ class FeatureIsolatedTransformer(nn.Transformer):
 
         full_memory = torch.cat((l_hand_memory, r_hand_memory, body_memory), -1)
 
-        if self.use_PBEE_decoder:
+        if self.use_IA_decoder:
             output = self.decoder(tgt, full_memory, tgt_mask=tgt_mask, memory_mask=memory_mask,
                                   tgt_key_padding_mask=tgt_key_padding_mask,
                                   memory_key_padding_mask=memory_key_padding_mask, training=training)
@@ -213,7 +217,7 @@ class SiFormer(nn.Module):
     """
 
     def __init__(self, num_classes, num_hid=108, attn_type='prob', num_enc_layers=3, num_dec_layers=2, patience=1,
-                 seq_len=204, device=None, PBEE_encoder = True, PBEE_decoder = False):
+                 seq_len=204, device=None, IA_encoder = True, IA_decoder = False):
         super(SiFormer, self).__init__()
         print("Feature isolated transformer")
         # self.feature_extractor = FeatureExtractor(num_hid=108, kernel_size=7)
@@ -224,7 +228,7 @@ class SiFormer(nn.Module):
         self.class_query = nn.Parameter(torch.rand(1, 1, num_hid))
         self.transformer = FeatureIsolatedTransformer(
             [42, 42, 24], [3, 3, 2, 9], num_encoder_layers=num_enc_layers, num_decoder_layers=num_dec_layers,
-            selected_attn=attn_type, PBEE_encoder=PBEE_encoder, PBEE_decoder=PBEE_decoder,
+            selected_attn=attn_type, IA_encoder=IA_encoder, IA_decoder=IA_decoder,
             inner_classifiers_config=[num_hid, num_classes], projections_config=[seq_len, 1],  device=device,
             patience=patience, use_pyramid_encoder=False, distil=False
         )

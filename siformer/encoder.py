@@ -166,7 +166,6 @@ class PBEEncoder(nn.TransformerEncoder):
                     patient_counter = 0
                 patient_result = projection_out
                 if patient_counter == self.patience:
-                    # print("break")
                     break
             # print(f"calculated_enc_layer_num: {calculated_layer_num}")
 

@@ -87,9 +87,9 @@ def get_default_args():
     parser.add_argument("--attn_type", type=str, default='prob', help="The attention mechanism used by the model")
     parser.add_argument("--num_enc_layers", type=int, default=3, help="Determines the number of encoder layers")
     parser.add_argument("--num_dec_layers", type=int, default=2, help="Determines the number of decoder layers")
-    parser.add_argument("--FIM", type=bool, default=False, help="Determines whether feature-isolated mechanism will be applied")
-    parser.add_argument("--PBEE_encoder", type=bool, default=False, help="Determines whether PBEE encoder will be used")
-    parser.add_argument("--PBEE_decoder", type=bool, default=False, help="Determines whether PBEE decoder will be used")
+    parser.add_argument("--FIM", type=bool, default=True, help="Determines whether feature-isolated mechanism will be applied")
+    parser.add_argument("--IA_encoder", type=bool, default=True, help="Determines whether input adaptive encoder will be used")
+    parser.add_argument("--IA_decoder", type=bool, default=False, help="Determines whether input adaptive decoder will be used")
     parser.add_argument("--patience", type=int, default=1, help="Determines the patience for earlier exist")
 
     return parser
@@ -121,15 +121,14 @@ def train(args):
     # Set device to CUDA only if applicable
     device = torch.device("cpu")
     if torch.cuda.is_available():
+        print("Cuda is available: True")
         device = torch.device("cuda")
-        print("Using cuda")
-    print(f"Pytorch version: {torch.__version__}")
 
     # Construct the model
     if args.FIM:
         slr_model = SiFormer(num_classes=args.num_classes, num_hid=args.num_seq_elements, attn_type=args.attn_type,
                               num_enc_layers=args.num_enc_layers, num_dec_layers=args.num_dec_layers, device=device,
-                              PBEE_encoder=args.PBEE_encoder, PBEE_decoder=args.PBEE_decoder,
+                              IA_encoder=args.IA_encoder, IA_decoder=args.IA_decoder,
                               patience=args.patience)
     else:
         slr_model = SpoTer(num_classes=args.num_classes, num_hid=args.num_seq_elements,
