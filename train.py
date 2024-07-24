@@ -81,14 +81,14 @@ def get_default_args():
 
     # Training time
     parser.add_argument("--record_training_time", type=bool, default=False,
-                        help="Determines whether continuous statistics of training time should be record")
+                        help="Determines whether continuous statistics of training time should be recorded")
 
     # Model settings
     parser.add_argument("--attn_type", type=str, default='prob', help="The attention mechanism used by the model")
     parser.add_argument("--num_enc_layers", type=int, default=3, help="Determines the number of encoder layers")
     parser.add_argument("--num_dec_layers", type=int, default=2, help="Determines the number of decoder layers")
-    parser.add_argument("--FIM", type=bool, default=False, help="Determines whether feature-isolated mechanism will be applied")
-    parser.add_argument("--PBEE_encoder", type=bool, default=False, help="Determines whether PBEE encoder will be used")
+    parser.add_argument("--FIM", type=bool, default=True, help="Determines whether feature-isolated mechanism will be applied")
+    parser.add_argument("--PBEE_encoder", type=bool, default=True, help="Determines whether PBEE encoder will be used")
     parser.add_argument("--PBEE_decoder", type=bool, default=False, help="Determines whether PBEE decoder will be used")
     parser.add_argument("--patience", type=int, default=1, help="Determines the patience for earlier exist")
 
