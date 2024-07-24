@@ -76,8 +76,20 @@ We employed the [WLASL100 and LSA64 datasets](https://drive.google.com/drive/fol
 ```
 
 ## License
-Soon...  
+The code is released under the MIT license.
 
 ## Citation
-This work has been accepted by ACM MM' 24. We will add the full citation upon publication.
-
+```
+@inproceedings{10.1145/3581783.3611724,
+  author = {Muxin Pu, Mei Kuan Lim, and Chun Yong Chong},
+  title = {Siformer: Feature-isolated Transformer for Efficient Skeleton-based Sign Language Recognition},
+  year = {2024},
+  isbn = {979-8-4007-0686-8},
+  publisher = {Association for Computing Machinery},
+  address = {Melbourne, VIC, Australia},
+  url = {https://doi.org/10.1145/3664647.3681578},
+  doi = {10.1145/3664647.3681578},
+  booktitle = {Proceedings of the 32st ACM International Conference on Multimedia},
+  series = {MM '24}
+}
+```
