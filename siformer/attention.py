@@ -1,3 +1,8 @@
+#    The reference for the code is the following
+#    Title: Informer: Beyond Efficient Transformer for Long Sequence Time-Series Forecasting
+#    Author: Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, Wancai Zhang
+#    Availability: https://github.com/zhouhaoyi/Informer2020/tree/main?tab=readme-ov-file
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
