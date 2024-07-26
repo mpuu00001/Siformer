@@ -193,3 +193,13 @@ class EncoderStack(nn.Module):
             x_stack.append(x_s)
         x_stack = torch.cat(x_stack, 0)
         return x_stack
+
+#    The reference for the code of the PBEEencoder class is the following
+#    Title: BERT Loses Patience: Fast and Robust Inference with Early Exit
+#    Author: Wangchunshu Zhou, Canwen Xu, Tao Ge, Julian McAuley, Ke Xu1, Furu Wei
+#    Availability: https://github.com/JetRunner/PABEE
+
+#    The reference for the code of the EncoderStack class is the following
+#    Title: Informer: Beyond Efficient Transformer for Long Sequence Time-Series Forecasting
+#    Author: Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, Wancai Zhang
+#    Availability: https://github.com/zhouhaoyi/Informer2020/tree/main?tab=readme-ov-file
