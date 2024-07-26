@@ -109,3 +109,8 @@ class DecoderLayer(nn.TransformerDecoderLayer):
         tgt = self.norm3(tgt)
 
         return tgt
+
+#    The reference for the code is the PBEEDecoder class is the following
+#    Title: BERT Loses Patience: Fast and Robust Inference with Early Exit
+#    Author: Wangchunshu Zhou, Canwen Xu, Tao Ge, Julian McAuley, Ke Xu1, Furu Wei
+#    Availability: https://github.com/JetRunner/PABEE
