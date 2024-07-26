@@ -222,6 +222,11 @@ def normalize_single_dict(row: dict):
     else:
         return original_row
 
+#    The reference for the code is the following
+#    Sign Pose-based Transformer for Word-level Sign Language Recognition
+#    Author: Matyáš Boháček and Marek Hrúz
+#    Availability: https://github.com/matyasbohacek/spoter
+
 
 if __name__ == "__main__":
     pass
