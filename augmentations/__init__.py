@@ -230,3 +230,8 @@ def augment_arm_joint_rotate(sign: dict, probability: float, angle_range: tuple)
 
 if __name__ == "__main__":
     pass
+
+#    The reference for the code is the following
+#    Sign Pose-based Transformer for Word-level Sign Language Recognition
+#    Author: Matyáš Boháček and Marek Hrúz
+#    Availability: https://github.com/matyasbohacek/spoter
