@@ -211,11 +211,6 @@ class SpoTer(nn.Module):
 
 
 class SiFormer(nn.Module):
-    """
-    Implementation of the SPOTER (Sign POse-based TransformER) architecture for sign language recognition from sequence
-    of skeletal data.
-    """
-
     def __init__(self, num_classes, num_hid=108, attn_type='prob', num_enc_layers=3, num_dec_layers=2, patience=1,
                  seq_len=204, device=None, IA_encoder = True, IA_decoder = False):
         super(SiFormer, self).__init__()
